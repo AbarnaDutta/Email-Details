@@ -55,7 +55,7 @@ The workflow fetches emails from a specified account, processes attachments, and
 1. Go to the [Google Account Security page](https://myaccount.google.com/security).
 2. Enable Two-Factor Authentication. 
 3. Under the "Signing in to Google" section, find and click on "App passwords."
-4. Under the "Select app" drop-down menu, choose "Custom name)."
+4. Under the "Select app" drop-down menu, choose "(Custom name)."
 5. Enter a name for the app password and click "Generate."
 6. Google will generate a 16-character app password (Copy this password and store it securely).
 
