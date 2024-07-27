@@ -35,25 +35,25 @@ mail = imaplib.IMAP4_SSL("imap.gmail.com")
 # Authenticate using the provided username and password
 mail.login(username, password)
 
-# Select the mailbox you want to use (in this case, the inbox)
+# Select the mailbox
 mail.select("inbox")
 status, messages = mail.search(None, "ALL")
 email_ids = messages[0].split()
 
-# Function to decode email subject
+# Decode email subject
 def decode_subject(subject):
     decoded, encoding = decode_header(subject)[0]
     if isinstance(decoded, bytes):
         return decoded.decode(encoding if encoding else "utf-8")
     return decoded
 
-# Function to decode email date
+# Decode email date
 def decode_date(date_):
     if 'GMT' in date_:
         date_ = date_.replace('GMT', '+0000')
     return datetime.strptime(date_, '%a, %d %b %Y %H:%M:%S %z')
 
-# Function to create a folder in Google Drive
+# Create a folder in Google Drive
 def create_drive_folder(folder_name, parent_folder_id):
     query = f"name='{folder_name}' and '{parent_folder_id}' in parents and mimeType='application/vnd.google-apps.folder'"
     results = drive_service.files().list(q=query, fields="files(id, webViewLink)").execute()
@@ -69,7 +69,7 @@ def create_drive_folder(folder_name, parent_folder_id):
         folder = drive_service.files().create(body=file_metadata, fields='id, webViewLink').execute()
         return folder.get('id'), folder.get('webViewLink')
 
-# Function to upload a file to Google Drive
+# Upload a file to Google Drive
 def upload_to_drive(file_data, file_name, folder_id):
     file_metadata = {
         'name': file_name,
