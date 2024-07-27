@@ -28,8 +28,8 @@ The workflow fetches emails from a specified account, processes attachments, and
 
 ### 3. Set Up the OAuth Consent Screen
 1. In the Google Cloud Console, navigate to `APIs & Services` > `OAuth consent screen`.
-2. Choose "External" or "Internal" based on your application's audience and click "Create".
-3. Fill in the required fields such as `App name`, `User support email`, `App logo`, etc.
+2. Choose "External" and click "Create".
+3. Fill in the required fields such as `App name`, `User support email`.
 4. In the `Scopes for Google APIs` section, add the following scopes:
    - **Google Sheets API**: `https://www.googleapis.com/auth/spreadsheets`
    - **Google Drive API**: `https://www.googleapis.com/auth/drive`
@@ -40,7 +40,7 @@ The workflow fetches emails from a specified account, processes attachments, and
 1. In the Google Cloud Console, navigate to `APIs & Services` > `Credentials`.
 2. Click on "Create Credentials" and select "Service Account."
 3. Enter the service account name and click "Create and Continue."
-4. Assign the required roles (e.g., `Editor` or `Owner` for broad access, or specific roles like `Gmail API User`, `Sheets API User`, and `Drive API User`).
+4. Assign the required role `Editor`.
 5. Click "Done" after assigning roles.
    
 ### 5. Download the JSON Key File
@@ -55,10 +55,9 @@ The workflow fetches emails from a specified account, processes attachments, and
 1. Go to the [Google Account Security page](https://myaccount.google.com/security).
 2. Enable Two-Factor Authentication. 
 3. Under the "Signing in to Google" section, find and click on "App passwords."
-4. You may be asked to sign in again to verify your identity.
-5. Under the "Select app" drop-down menu, choose "Other (Custom name)."
-6. Enter a name for the app password and click "Generate."
-7. Google will generate a 16-character app password (Copy this password and store it securely).
+4. Under the "Select app" drop-down menu, choose "Custom name)."
+5. Enter a name for the app password and click "Generate."
+6. Google will generate a 16-character app password (Copy this password and store it securely).
 
 ### 8. Store Credentials
 
