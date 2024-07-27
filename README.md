@@ -87,6 +87,6 @@ The project.py script is responsible for fetching emails, processing content and
 
 ## Run the Workflow
 
-**Automatic Runs:** The workflow runs every 5 minutes as scheduled.
-**Manual Runs:** Trigger the workflow manually from the GitHub Actions tab.
+- **Automatic Runs:** The workflow runs every 5 minutes as scheduled.
+- **Manual Runs:** Trigger the workflow manually from the GitHub Actions tab.
 
