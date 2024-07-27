@@ -10,28 +10,57 @@ The workflow fetches emails from a specified account, processes attachments, and
 - **Handles attachments**: Saves attachments to a specified Google Drive folder.
 - **Updates Google Sheets**: Logs email details and attachment links to Google Sheets.
 
-## Prerequisites
-
-1. **Google Account**: For Google Sheets and Drive API access.
-2. **Gmail Account**: For accessing and processing emails.
-
 ## Setup
 
-### 1. Prepare Your Environment
+### 1. Create a Google Cloud Project
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
+2. Sign in with your Google account.
+3. Click the project drop-down and select "New Project."
+4. Enter the project name and click "Create."
 
-1. **Create a Google Service Account**:
-   - Go to the [Google Cloud Console](https://console.cloud.google.com/).
-   - Create a new project or select an existing project.
-   - Navigate to `APIs & Services` > `Credentials`.
-   - Create a new service account and download the JSON key file.
+### 2. Enable Required APIs
+1. In the Google Cloud Console, select your project.
+2. Navigate to `APIs & Services` > `Library`.
+3. Enable the following APIs:
+   - **Gmail API**
+   - **Google Sheets API**
+   - **Google Drive API**
 
-2. **Share Google Sheets**:
-   - Share the Google Sheets document with the email address associated with your Google service account.
+### 3. Set Up the OAuth Consent Screen
+1. In the Google Cloud Console, navigate to `APIs & Services` > `OAuth consent screen`.
+2. Choose "External" or "Internal" based on your application's audience and click "Create".
+3. Fill in the required fields such as `App name`, `User support email`, `App logo`, etc.
+4. In the `Scopes for Google APIs` section, add the following scopes:
+   - **Google Sheets API**: `https://www.googleapis.com/auth/spreadsheets`
+   - **Google Drive API**: `https://www.googleapis.com/auth/drive`
+   - **Gmail API**: `https://www.googleapis.com/auth/gmail.readonly`
+5. Complete the OAuth consent screen setup by clicking "Save and Continue."
 
-3. **Enable APIs**:
-   - Enable the Google Sheets API and Google Drive API for your project.
+### 4. Create a Service Account and 
+1. In the Google Cloud Console, navigate to `APIs & Services` > `Credentials`.
+2. Click on "Create Credentials" and select "Service Account."
+3. Enter the service account name and click "Create and Continue."
+4. Assign the required roles (e.g., `Editor` or `Owner` for broad access, or specific roles like `Gmail API User`, `Sheets API User`, and `Drive API User`).
+5. Click "Done" after assigning roles.
+   
+### 5. Download the JSON Key File
+1. In the Service Accounts list, click on the service account you just created.
+2. Go to the `Keys` tab and click "Add Key" > "Create New Key."
+3. Choose `JSON` and click "Create." The JSON key file will be downloaded to your computer(Save it securely).
 
-### 2. Store Credentials
+### 6. Share the Google Sheets document and Google Drive folder with the email address associated with your Google service account.
+
+### 7. Generate an App Password
+
+1. Go to the [Google Account Security page](https://myaccount.google.com/security).
+2. Enable Two-Factor Authentication. 
+3. Under the "Signing in to Google" section, find and click on "App passwords."
+4. You may be asked to sign in again to verify your identity.
+5. Under the "Select app" drop-down menu, choose "Other (Custom name)."
+6. Enter a name for the app password and click "Generate."
+7. Google will generate a 16-character app password (Copy this password and store it securely).
+
+### 8. Store Credentials
 
 **Add GitHub Secrets**:
    - Go to your GitHub repository.
@@ -41,7 +70,7 @@ The workflow fetches emails from a specified account, processes attachments, and
      - **`EMAIL_USERNAME`**: Your email address.
      - **`EMAIL_PASSWORD`**: Your email password (use an app-specific password if you have 2-factor authentication enabled).
 
-### 3. Create GitHub Actions Workflow
+### 9. Create GitHub Actions Workflow
 
 1. **Add Workflow File**:
    - In your repository, create the following directory structure:
@@ -54,7 +83,7 @@ The workflow fetches emails from a specified account, processes attachments, and
 2. **Workflow Process**:
    The process-emails.yml workflow in GitHub Actions triggers every 5 minutes or manually, sets up Python, installs dependencies, handles credentials securely, and runs python script.
    
-### 4. Python Script
+### 10. Python Script
 The project.py script is responsible for fetching emails, processing content and attachments, and updating Google Sheets and Drive.
 
 ## Run the Workflow
