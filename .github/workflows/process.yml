@@ -25,7 +25,9 @@ jobs:
         pip install -r requirements.txt
 
     - name: Create credentials file
-      run: echo "${{ secrets.CREDENTIALS_JSON }}" > credentials.json
+      run: |
+        echo "${{ secrets.CREDENTIALS_JSON }}" > credentials.json
+      shell: bash
 
     - name: Run script
       env:
