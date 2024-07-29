@@ -1,3 +1,4 @@
+import os
 import imaplib
 import email
 from email.header import decode_header
@@ -10,21 +11,20 @@ from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2.service_account import Credentials
 
 # Account credentials
-username = 'abarnadutta1@gmail.com'
-password = "vetv ifwu scjo bccj"
+username = os.environ.get('EMAIL_USERNAME')
+password = os.environ.get('EMAIL_PASSWORD')
 
 # Google Sheets and Drive API setup
-scope = ["https://spreadsheets.google.com/feeds", 
-         "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("D:\\ABARNA DUTTA\\RPA\\email details\\credentials.json", scope)
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name(os.environ.get('CREDENTIALS_PATH'), scope)
 client = gspread.authorize(creds)
 
 # Initialize Google Drive API service
-drive_creds = Credentials.from_service_account_file("D:\\ABARNA DUTTA\\RPA\\email details\\credentials.json", scopes=scope)
+drive_creds = Credentials.from_service_account_file(os.environ.get('CREDENTIALS_PATH'), scopes=scope)
 drive_service = build('drive', 'v3', credentials=drive_creds)
 
 # Open the Google Sheets document
-spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1saKVvG0D-serGiqPYkPmcJKDoyojwbsZLjM2nvIm5RQ/edit?gid=0")
+spreadsheet = client.open_by_url(os.environ.get('SPREADSHEET_URL'))
 
 # Create an IMAP4 class with SSL
 mail = imaplib.IMAP4_SSL("imap.gmail.com")
@@ -70,7 +70,7 @@ def upload_to_drive(file_data, file_name, folder_id):
     print(f'File {file_name} uploaded to Google Drive with ID: {file.get("id")}')
 
 # Google Drive parent folder ID
-drive_folder_id = '1V8PmM2wLhuv8iWJbm_MqKszlhWZ6iZ5b'
+drive_folder_id = os.environ.get('DRIVE_FOLDER_ID')
 
 # Function to process each part of the email
 def process_part(part):
