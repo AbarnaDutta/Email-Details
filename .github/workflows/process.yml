@@ -26,7 +26,7 @@ jobs:
 
     - name: Create credentials file
       run: |
-        echo "${{ secrets.CREDENTIALS_JSON }}" | jq . > credentials.json
+        echo "${{ secrets.CREDENTIALS_JSON }}" > credentials.json
         ls -l credentials.json  # List file to verify creation
         cat credentials.json    # Print file contents for verification (omit in production for security)
       shell: bash
@@ -38,8 +38,7 @@ jobs:
         CREDENTIALS_PATH: ./credentials.json
         SPREADSHEET_URL: ${{ secrets.SPREADSHEET_URL }}
         DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-      run: |
-        python project.py
+      run: python project.py
       continue-on-error: false  # Set to true to allow the workflow to continue even if the script fails
 
     - name: Archive logs
