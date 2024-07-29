@@ -17,7 +17,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.12'  # Specify the Python version explicitly
+        python-version: '3.x'
 
     - name: Install dependencies
       run: |
@@ -26,12 +26,11 @@ jobs:
 
     - name: Create credentials file
       run: |
-        echo "${{ secrets.CREDENTIALS_JSON }}" > credentials.json
+        echo "${{ secrets.CREDENTIALS_JSON }}" | sed 's/\\n/\n/g' > credentials.json
       shell: bash
 
     - name: Debug credentials file
-      run: |
-        cat credentials.json
+      run: cat credentials.json
       shell: bash
 
     - name: Run script
