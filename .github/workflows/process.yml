@@ -34,4 +34,4 @@ jobs:
 
     - name: Run email processor
       run: |
-        python process_emails.py
+        python project.py
