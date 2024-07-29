@@ -17,21 +17,16 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.x'
+        python-version: '3.8'  # Specify the exact version you need
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Create credentials file
+    - name: Decode and write credentials file
       run: |
-        echo "${{ secrets.CREDENTIALS_JSON }}" > credentials_temp.json
-        tr -d '\n' < credentials_temp.json > credentials.json
-        rm credentials_temp.json
-
-    - name: Debug credentials file
-      run: cat credentials.json
+        echo "${{ secrets.CREDENTIALS_JSON }}" | base64 -d > credentials.json
 
     - name: Run script
       env:
@@ -41,3 +36,6 @@ jobs:
         SPREADSHEET_URL: ${{ secrets.SPREADSHEET_URL }}
         DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
       run: python project.py
+
+    - name: Clean up credentials
+      run: rm credentials.json
