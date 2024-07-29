@@ -28,7 +28,7 @@ jobs:
       run: |
         echo "${{ secrets.CREDENTIALS_JSON }}" > credentials.json
         ls -l credentials.json  # List file to verify creation
-        cat credentials.json    # Print file contents for verification (omit in production for security)
+        head -n 20 credentials.json  # Print the first 20 lines for verification
       shell: bash
 
     - name: Run script
