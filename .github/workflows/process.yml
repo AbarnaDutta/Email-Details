@@ -26,12 +26,12 @@ jobs:
 
     - name: Create credentials file
       run: |
-        echo "${{ secrets.CREDENTIALS_JSON }}" | sed 's/\\n/\n/g' > credentials.json
-      shell: bash
+        echo "${{ secrets.CREDENTIALS_JSON }}" > credentials_temp.json
+        tr -d '\n' < credentials_temp.json > credentials.json
+        rm credentials_temp.json
 
     - name: Debug credentials file
       run: cat credentials.json
-      shell: bash
 
     - name: Run script
       env:
