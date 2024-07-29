@@ -1,4 +1,3 @@
-import os
 import imaplib
 import email
 from email.header import decode_header
@@ -11,43 +10,40 @@ from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2.service_account import Credentials
 
 # Account credentials
-username = os.getenv('EMAIL_USERNAME')  # Fetch username from environment variables for security
-password = os.getenv('EMAIL_PASSWORD')  # Fetch password from environment variables for security
+username = 'abarnadutta1@gmail.com'
+password = "vetv ifwu scjo bccj"
 
 # Google Sheets and Drive API setup
 scope = ["https://spreadsheets.google.com/feeds", 
          "https://www.googleapis.com/auth/drive"]
-
-# Authorize using the credentials.json file
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name("D:\\ABARNA DUTTA\\RPA\\email details\\credentials.json", scope)
 client = gspread.authorize(creds)
 
 # Initialize Google Drive API service
-drive_creds = Credentials.from_service_account_file("credentials.json", scopes=scope)
+drive_creds = Credentials.from_service_account_file("D:\\ABARNA DUTTA\\RPA\\email details\\credentials.json", scopes=scope)
 drive_service = build('drive', 'v3', credentials=drive_creds)
 
-# Open the Google Sheets document using its URL
+# Open the Google Sheets document
 spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1saKVvG0D-serGiqPYkPmcJKDoyojwbsZLjM2nvIm5RQ/edit?gid=0")
 
-# Create an IMAP4 class with SSL for secure email connection
+# Create an IMAP4 class with SSL
 mail = imaplib.IMAP4_SSL("imap.gmail.com")
 
-# Authenticate using the provided username and password
+# Authenticate
 mail.login(username, password)
 
-# Select the mailbox
 mail.select("inbox")
 status, messages = mail.search(None, "ALL")
 email_ids = messages[0].split()
 
-# Decode email subject
+# Function to decode email subject
 def decode_subject(subject):
     decoded, encoding = decode_header(subject)[0]
     if isinstance(decoded, bytes):
         return decoded.decode(encoding if encoding else "utf-8")
     return decoded
 
-# Decode email date
+# Function to decode email date
 def decode_date(date_):
     if 'GMT' in date_:
         date_ = date_.replace('GMT', '+0000')
@@ -55,19 +51,13 @@ def decode_date(date_):
 
 # Create a folder in Google Drive
 def create_drive_folder(folder_name, parent_folder_id):
-    query = f"name='{folder_name}' and '{parent_folder_id}' in parents and mimeType='application/vnd.google-apps.folder'"
-    results = drive_service.files().list(q=query, fields="files(id, webViewLink)").execute()
-    items = results.get('files', [])
-    if items:
-        return items[0]['id'], items[0]['webViewLink']
-    else:
-        file_metadata = {
-            'name': folder_name,
-            'mimeType': 'application/vnd.google-apps.folder',
-            'parents': [parent_folder_id]
-        }
-        folder = drive_service.files().create(body=file_metadata, fields='id, webViewLink').execute()
-        return folder.get('id'), folder.get('webViewLink')
+    file_metadata = {
+        'name': folder_name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent_folder_id]
+    }
+    folder = drive_service.files().create(body=file_metadata, fields='id, webViewLink').execute()
+    return folder.get('id'), folder.get('webViewLink')
 
 # Upload a file to Google Drive
 def upload_to_drive(file_data, file_name, folder_id):
@@ -82,8 +72,27 @@ def upload_to_drive(file_data, file_name, folder_id):
 # Google Drive parent folder ID
 drive_folder_id = '1V8PmM2wLhuv8iWJbm_MqKszlhWZ6iZ5b'
 
-# Initialize email_folder_link
-email_folder_link = "None"
+# Function to process each part of the email
+def process_part(part):
+    content_disposition = str(part.get("Content-Disposition"))
+    has_attachment = False
+    details = ""
+    filename = None
+
+    if "attachment" in content_disposition or part.get_filename():
+        filename = part.get_filename()
+        if filename:
+            print(f"Processing attachment: {filename}")
+            file_data = part.get_payload(decode=True)
+            has_attachment = True
+
+    if part.get_content_type() == "text/plain" and not "attachment" in content_disposition:
+        try:
+            details = part.get_payload(decode=True).decode()
+        except:
+            pass
+
+    return has_attachment, details, filename, part.get_payload(decode=True)
 
 # Fetch and process each email
 for email_id in email_ids:
@@ -103,52 +112,37 @@ for email_id in email_ids:
             except gspread.exceptions.WorksheetNotFound:
                 ws = spreadsheet.add_worksheet(title=email_date, rows="100", cols="20")
                 ws.append_row(["Time", "From", "Subject", "Details", "Attachment"])
-            
-            # Update the worksheet headers if necessary
-            headers = ws.row_values(1)
-            if "Attachment" not in headers:
-                headers.append("Attachment")
-                ws.delete_row(1)
-                ws.insert_row(headers, 1)
 
             # Check if the email is already recorded
             records = ws.get_all_records()
             already_recorded = any(record['Subject'] == subject and record['Time'] == email_time for record in records)
             if already_recorded:
                 continue
-            
-            # Flag to check if email has attachments
+
             has_attachment = False
-            
             details = ""
+            email_folder_id, email_folder_link = None, None
+
             if msg.is_multipart():
                 for part in msg.walk():
-                    content_type = part.get_content_type()
-                    content_disposition = str(part.get("Content-Disposition"))
-                    try:
-                        body = part.get_payload(decode=True).decode()
-                    except:
-                        pass
-                    if "attachment" in content_disposition:
-                        filename = part.get_filename()
-                        if filename:
-                            if not has_attachment:
-                                # Create a new folder for this email's attachments
-                                email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
-                                has_attachment = True
-                            file_data = part.get_payload(decode=True)
-                            file_name = f"{filename}"
-                            upload_to_drive(file_data, file_name, email_folder_id)
-                    if content_type == "text/plain" and "attachment" not in content_disposition:
-                        details = body
+                    part_has_attachment, part_details, filename, file_data = process_part(part)
+                    if part_has_attachment:
+                        if not email_folder_id:
+                            # Create a new folder for this email's attachments
+                            email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
+                        upload_to_drive(file_data, filename, email_folder_id)
+                        has_attachment = True
+                    if part_details:
+                        details += part_details
             else:
-                content_type = msg.get_content_type()
-                body = msg.get_payload(decode=True).decode()
-                if content_type == "text/plain":
-                    details = body
-            
+                has_attachment, details, filename, file_data = process_part(msg)
+                if has_attachment:
+                    # Create a new folder for this email's attachments
+                    email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
+                    upload_to_drive(file_data, filename, email_folder_id)
+
             attachment_link = email_folder_link if has_attachment else "None"
-            
+
             # Append the details to the worksheet
             ws.append_row([email_time, from_, subject, details, attachment_link])
 
