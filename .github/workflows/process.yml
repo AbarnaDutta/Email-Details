@@ -1,10 +1,14 @@
 name: Email Automation
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'  # Runs every 5 minutes
-  workflow_dispatch:       # Manual trigger
-  repository_dispatch:     # External service trigger
+  workflow_dispatch:
+    inputs:
+      email_subject:
+        description: 'Subject of the email'
+        required: true
+      email_body:
+        description: 'Body of the email'
+        required: true
 
 jobs:
   run-script:
@@ -17,25 +21,15 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.8'  # Specify the exact version you need
+        python-version: '3.8'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Decode and write credentials file
-      run: |
-        echo "${{ secrets.CREDENTIALS_JSON }}" | base64 -d > credentials.json
-
     - name: Run script
       env:
-        EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
-        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-        CREDENTIALS_PATH: ./credentials.json
-        SPREADSHEET_URL: ${{ secrets.SPREADSHEET_URL }}
-        DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        EMAIL_SUBJECT: ${{ github.event.inputs.email_subject }}
+        EMAIL_BODY: ${{ github.event.inputs.email_body }}
       run: python project.py
-
-    - name: Clean up credentials
-      run: rm credentials.json
