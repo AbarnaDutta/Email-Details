@@ -167,14 +167,27 @@ for email_id in email_ids:
             email_date = decode_date(date_).strftime("%Y-%m-%d")
 
             # Get or create the worksheet for this date
+            ws = None
             try:
                 ws = exponential_backoff(spreadsheet.worksheet, email_date)
             except gspread.exceptions.WorksheetNotFound:
                 ws = exponential_backoff(spreadsheet.add_worksheet, title=email_date, rows="100", cols="20")
                 ws.append_row(["Time", "From", "Subject", "Details", "Attachment"])
+            except Exception as e:
+                logging.error(f"Failed to get or create worksheet: {e}")
+                continue
+
+            if not ws:
+                logging.error(f"Worksheet is None for date: {email_date}")
+                continue
 
             # Check if the email is already recorded
-            records = exponential_backoff(ws.get_all_records)
+            try:
+                records = exponential_backoff(ws.get_all_records)
+            except Exception as e:
+                logging.error(f"Failed to get records from worksheet: {e}")
+                continue
+
             already_recorded = any(record['Subject'] == subject and record['Time'] == email_time for record in records)
             if already_recorded:
                 continue
@@ -208,7 +221,12 @@ for email_id in email_ids:
             drive_link_str = ", ".join(drive_links)
 
             # Append the details to the worksheet
-            exponential_backoff(ws.append_row, [email_time, from_, subject, details, attachment_link if not drive_links else drive_link_str])
+            try:
+                exponential_backoff(ws.append_row, [email_time, from_, subject, details, attachment_link if not drive_links else drive_link_str])
+            except Exception as e:
+                logging.error(f"Failed to append row to worksheet: {e}")
+                continue
+
 
 # Close the connection and logout
 mail.close()
