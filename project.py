@@ -11,6 +11,7 @@ from google.oauth2.service_account import Credentials
 import logging
 import time
 import re
+import os
 
 # Set up logging
 logging.basicConfig(filename='email_automation.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
