@@ -1,4 +1,3 @@
-import os
 import imaplib
 import email
 from email.header import decode_header
@@ -10,7 +9,9 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2.service_account import Credentials
 import logging
+import time
 import re
+
 # Set up logging
 logging.basicConfig(filename='email_automation.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
