@@ -101,28 +101,6 @@ drive_folder_id = os.environ.get('DRIVE_FOLDER_ID')
 # Function to process each part of the email
 def process_part(part):
     content_disposition = str(part.get("Content-Disposition"))
-    has_attachment = False
-    details = ""
-    filename = None
-
-    if "attachment" in content_disposition or part.get_filename():
-        filename = part.get_filename()
-        if filename:
-            logging.info(f"Processing attachment: {filename}")
-            file_data = part.get_payload(decode=True)
-            has_attachment = True
-
-    if part.get_content_type() == "text/plain" and not "attachment" in content_disposition:
-        try:
-            details = part.get_payload(decode=True).decode()
-        except:
-            pass
-
-    return has_attachment, details, filename, part.get_payload(decode=True)
-
-# Function to process each part of the email
-def process_part(part):
-    content_disposition = str(part.get("Content-Disposition"))
     content_type = part.get_content_type()
     content_transfer_encoding = part.get("Content-Transfer-Encoding", "")
 
@@ -135,7 +113,7 @@ def process_part(part):
     if "attachment" in content_disposition or part.get_filename():
         filename = part.get_filename()
         if filename:
-            print(f"Attachment found: {filename}")
+            logging.info(f"Attachment found: {filename}")
             file_data = part.get_payload(decode=True)
             if file_data is not None:
                 has_attachment = True
@@ -149,14 +127,32 @@ def process_part(part):
             if payload is not None:
                 details += payload.decode()
         except Exception as e:
-            print(f"Failed to decode text part: {e}")
+            logging.error(f"Failed to decode text part: {e}")
 
     # Log part details for debugging
-    print(f"Content Type: {content_type}")
-    print(f"Content-Disposition: {content_disposition}")
-    print(f"Content Transfer Encoding: {content_transfer_encoding}")
+    logging.debug(f"Content Type: {content_type}")
+    logging.debug(f"Content-Disposition: {content_disposition}")
+    logging.debug(f"Content Transfer Encoding: {content_transfer_encoding}")
 
     return has_attachment, details, filename, file_data if has_attachment else None
+
+# Extract Google Drive links from text
+def extract_drive_links(text):
+    return re.findall(r'https://drive\.google\.com[^\s]+', text)
+
+# Function to handle API calls with exponential backoff
+def exponential_backoff(func, *args, **kwargs):
+    max_attempts = 5
+    for n in range(max_attempts):
+        try:
+            return func(*args, **kwargs)
+        except gspread.exceptions.APIError as e:
+            if "429" in str(e):
+                wait_time = 2 ** n
+                logging.warning(f"Quota exceeded, retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                raise
 
 # Fetch and process each email
 for email_id in email_ids:
@@ -172,13 +168,13 @@ for email_id in email_ids:
 
             # Get or create the worksheet for this date
             try:
-                ws = spreadsheet.worksheet(email_date)
+                ws = exponential_backoff(spreadsheet.worksheet, email_date)
             except gspread.exceptions.WorksheetNotFound:
-                ws = spreadsheet.add_worksheet(title=email_date, rows="100", cols="20")
+                ws = exponential_backoff(spreadsheet.add_worksheet, title=email_date, rows="100", cols="20")
                 ws.append_row(["Time", "From", "Subject", "Details", "Attachment"])
 
             # Check if the email is already recorded
-            records = ws.get_all_records()
+            records = exponential_backoff(ws.get_all_records)
             already_recorded = any(record['Subject'] == subject and record['Time'] == email_time for record in records)
             if already_recorded:
                 continue
@@ -186,6 +182,7 @@ for email_id in email_ids:
             has_attachment = False
             details = ""
             email_folder_id, email_folder_link = None, None
+            drive_links = []
 
             if msg.is_multipart():
                 for part in msg.walk():
@@ -198,29 +195,20 @@ for email_id in email_ids:
                         has_attachment = True
                     if part_details:
                         details += part_details
-
+                        drive_links.extend(extract_drive_links(part_details))
             else:
                 has_attachment, details, filename, file_data = process_part(msg)
                 if has_attachment:
                     # Create a new folder for this email's attachments
                     email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
                     upload_to_drive(file_data, filename, email_folder_id)
+                drive_links.extend(extract_drive_links(details))
 
-            # Check for Google Drive links in email body
-            attachment_link = "None"
-            for part in msg.walk():
-                if part.get_content_type() in ["text/plain", "text/html"]:
-                    body = part.get_payload(decode=True)
-                    if body:
-                        body_str = body.decode()
-                        links = re.findall(r'(https://drive\.google\.com[^\s]+)', body_str)
-                        if links:
-                            attachment_link = " | ".join(links)
-                        else:
-                            attachment_link = email_folder_link if has_attachment else "None"
+            attachment_link = email_folder_link if has_attachment else "None"
+            drive_link_str = ", ".join(drive_links)
 
             # Append the details to the worksheet
-            ws.append_row([email_time, from_, subject, details, attachment_link])
+            exponential_backoff(ws.append_row, [email_time, from_, subject, details, attachment_link if not drive_links else drive_link_str])
 
 # Close the connection and logout
 mail.close()
