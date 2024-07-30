@@ -10,7 +10,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2.service_account import Credentials
 import logging
-
+import re
 # Set up logging
 logging.basicConfig(filename='email_automation.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -118,61 +118,107 @@ def process_part(part):
 
     return has_attachment, details, filename, part.get_payload(decode=True)
 
+# Function to process each part of the email
+def process_part(part):
+    content_disposition = str(part.get("Content-Disposition"))
+    content_type = part.get_content_type()
+    content_transfer_encoding = part.get("Content-Transfer-Encoding", "")
+
+    has_attachment = False
+    details = ""
+    filename = None
+    file_data = None
+
+    # Check if the part is an attachment
+    if "attachment" in content_disposition or part.get_filename():
+        filename = part.get_filename()
+        if filename:
+            print(f"Attachment found: {filename}")
+            file_data = part.get_payload(decode=True)
+            if file_data is not None:
+                has_attachment = True
+            else:
+                logging.error(f"Failed to decode attachment: {filename}")
+
+    # Handle text/plain and text/html parts separately
+    if content_type in ["text/plain", "text/html"] and not "attachment" in content_disposition:
+        try:
+            payload = part.get_payload(decode=True)
+            if payload is not None:
+                details += payload.decode()
+        except Exception as e:
+            print(f"Failed to decode text part: {e}")
+
+    # Log part details for debugging
+    print(f"Content Type: {content_type}")
+    print(f"Content-Disposition: {content_disposition}")
+    print(f"Content Transfer Encoding: {content_transfer_encoding}")
+
+    return has_attachment, details, filename, file_data if has_attachment else None
+
 # Fetch and process each email
 for email_id in email_ids:
-    try:
-        status, msg_data = mail.fetch(email_id, "(RFC822)")
-        for response_part in msg_data:
-            if isinstance(response_part, tuple):
-                msg = email.message_from_bytes(response_part[1])
-                subject = decode_subject(msg["Subject"])
-                from_ = msg.get("From")
-                date_ = msg.get("Date")
-                email_time = decode_date(date_).strftime("%H:%M:%S") if decode_date(date_) else "Unknown"
-                email_date = decode_date(date_).strftime("%Y-%m-%d") if decode_date(date_) else "Unknown"
+    status, msg_data = mail.fetch(email_id, "(RFC822)")
+    for response_part in msg_data:
+        if isinstance(response_part, tuple):
+            msg = email.message_from_bytes(response_part[1])
+            subject = decode_subject(msg["Subject"])
+            from_ = msg.get("From")
+            date_ = msg.get("Date")
+            email_time = decode_date(date_).strftime("%H:%M:%S")
+            email_date = decode_date(date_).strftime("%Y-%m-%d")
 
-                # Get or create the worksheet for this date
-                try:
-                    ws = spreadsheet.worksheet(email_date)
-                except gspread.exceptions.WorksheetNotFound:
-                    ws = spreadsheet.add_worksheet(title=email_date, rows="100", cols="20")
-                    ws.append_row(["Time", "From", "Subject", "Details", "Attachment"])
+            # Get or create the worksheet for this date
+            try:
+                ws = spreadsheet.worksheet(email_date)
+            except gspread.exceptions.WorksheetNotFound:
+                ws = spreadsheet.add_worksheet(title=email_date, rows="100", cols="20")
+                ws.append_row(["Time", "From", "Subject", "Details", "Attachment"])
 
-                # Check if the email is already recorded
-                records = ws.get_all_records()
-                already_recorded = any(record['Subject'] == subject and record['Time'] == email_time for record in records)
-                if already_recorded:
-                    continue
+            # Check if the email is already recorded
+            records = ws.get_all_records()
+            already_recorded = any(record['Subject'] == subject and record['Time'] == email_time for record in records)
+            if already_recorded:
+                continue
 
-                has_attachment = False
-                details = ""
-                email_folder_id, email_folder_link = None, None
+            has_attachment = False
+            details = ""
+            email_folder_id, email_folder_link = None, None
 
-                if msg.is_multipart():
-                    for part in msg.walk():
-                        part_has_attachment, part_details, filename, file_data = process_part(part)
-                        if part_has_attachment:
-                            if not email_folder_id:
-                                # Create a new folder for this email's attachments
-                                email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
-                            upload_to_drive(file_data, filename, email_folder_id)
-                            has_attachment = True
-                        if part_details:
-                            details += part_details
-                else:
-                    has_attachment, details, filename, file_data = process_part(msg)
-                    if has_attachment:
-                        # Create a new folder for this email's attachments
-                        email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
+            if msg.is_multipart():
+                for part in msg.walk():
+                    part_has_attachment, part_details, filename, file_data = process_part(part)
+                    if part_has_attachment:
+                        if not email_folder_id:
+                            # Create a new folder for this email's attachments
+                            email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
                         upload_to_drive(file_data, filename, email_folder_id)
+                        has_attachment = True
+                    if part_details:
+                        details += part_details
 
-                attachment_link = email_folder_link if has_attachment else "None"
+            else:
+                has_attachment, details, filename, file_data = process_part(msg)
+                if has_attachment:
+                    # Create a new folder for this email's attachments
+                    email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
+                    upload_to_drive(file_data, filename, email_folder_id)
 
-                # Append the details to the worksheet
-                ws.append_row([email_time, from_, subject, details, attachment_link])
+            # Check for Google Drive links in email body
+            attachment_link = "None"
+            for part in msg.walk():
+                if part.get_content_type() in ["text/plain", "text/html"]:
+                    body = part.get_payload(decode=True)
+                    if body:
+                        body_str = body.decode()
+                        links = re.findall(r'(https://drive\.google\.com[^\s]+)', body_str)
+                        if links:
+                            attachment_link = " | ".join(links)
+                        else:
+                            attachment_link = email_folder_link if has_attachment else "None"
 
-    except Exception as e:
-        logging.error(f"Error processing email ID {email_id}: {e}")
+            # Append the details to the worksheet
+            ws.append_row([email_time, from_, subject, details, attachment_link])
 
 # Close the connection and logout
 mail.close()
