@@ -13,9 +13,6 @@ import time
 import re
 import os
 
-# Set up logging
-logging.basicConfig(filename='email_automation.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 # Account credentials
 username = os.getenv('EMAIL_USERNAME')
 password = os.getenv('EMAIL_PASSWORD')
@@ -26,12 +23,19 @@ creds = ServiceAccountCredentials.from_json_keyfile_name(os.getenv('CREDENTIALS_
 client = gspread.authorize(creds)
 
 # Initialize Google Drive API service
-drive_creds = Credentials.from_service_account_file("D:\\ABARNA DUTTA\\RPA\\email details\\credentials.json", scopes=scope)
+drive_creds = Credentials.from_service_account_file(os.getenv('CREDENTIALS_PATH'), scopes=scope)
 drive_service = build('drive', 'v3', credentials=drive_creds)
 
 # Open the Google Sheets document
-spreadsheet_url = "https://docs.google.com/spreadsheets/d/1saKVvG0D-serGiqPYkPmcJKDoyojwbsZLjM2nvIm5RQ/edit?gid=0"
-spreadsheet = client.open_by_url(spreadsheet_url)
+spreadsheet = client.open_by_url(os.getenv('SPREADSHEET_URL'))
+
+# Google Sheets and Drive API setup
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name(os.getenv('CREDENTIALS_PATH'), scope)
+client = gspread.authorize(creds)
+
+# Google Drive parent folder ID
+drive_folder_id = os.getenv('DRIVE_FOLDER_ID')
 
 # Create a cache for worksheets
 worksheet_cache = {ws.title: ws for ws in spreadsheet.worksheets()}
