@@ -155,6 +155,19 @@ def process_part(part):
 
     return has_attachment, details, filename, file_data if has_attachment else None
 
+def read_worksheet_with_retry(ws, retries=5, delay=10):
+    for attempt in range(retries):
+        try:
+            return ws.get_all_records()
+        except gspread.exceptions.APIError as e:
+            if e.response.status_code == 429:  # Rate limit error
+                logging.warning(f"Rate limit exceeded while reading worksheet. Retrying in {delay} seconds...")
+                time.sleep(delay)
+                delay *= 2  # Exponential backoff
+            else:
+                raise e
+    raise Exception("Failed to read worksheet after multiple attempts")
+
 # Fetch and process each email
 for email_id in email_ids:
     status, msg_data = mail.fetch(email_id, "(RFC822)")
@@ -178,7 +191,12 @@ for email_id in email_ids:
                 ws = spreadsheet.add_worksheet(title=email_date, rows="100", cols="20")
                 ws.append_row(["Time", "From", "Subject", "Details", "Attachment"])
 
-            records = ws.get_all_records()
+            try:
+                records = read_worksheet_with_retry(ws)
+            except Exception as e:
+                logging.error(f"Failed to read worksheet records: {e}")
+                continue
+
             already_recorded = any(record['Subject'] == subject and record['Time'] == email_time for record in records)
             if already_recorded:
                 continue
@@ -215,13 +233,14 @@ for email_id in email_ids:
                         else:
                             attachment_link = email_folder_link if has_attachment else "None"
 
-            # Handle the `details` field size
-            if len(details) > MAX_CELL_SIZE:
-                details_chunks = split_text(details, MAX_CELL_SIZE)
-                for chunk in details_chunks:
+            # Handle long details text
+            details_chunks = split_text(details, MAX_CELL_SIZE)
+            for chunk in details_chunks:
+                try:
                     ws.append_row([email_time, from_, subject, chunk, attachment_link])
-            else:
-                ws.append_row([email_time, from_, subject, details, attachment_link])
+                except gspread.exceptions.APIError as e:
+                    logging.error(f"Failed to append row to worksheet: {e}")
+                    time.sleep(10)  # Short delay before retrying
 
 # Close the connection and logout
 mail.close()
