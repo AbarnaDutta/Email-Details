@@ -12,15 +12,14 @@ import logging
 import time
 import re
 
-# Set up logging
-logging.basicConfig(filename='email_automation.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Account credentials
 username = 'abarnadutta1@gmail.com'
 password = "vetv ifwu scjo bccj"
 
 # Google Sheets and Drive API setup
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+scope = ["https://spreadsheets.google.com/feeds", 
+         "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("D:\\ABARNA DUTTA\\RPA\\email details\\credentials.json", scope)
 client = gspread.authorize(creds)
 
@@ -36,6 +35,7 @@ mail = imaplib.IMAP4_SSL("imap.gmail.com")
 
 # Authenticate
 mail.login(username, password)
+
 mail.select("inbox")
 status, messages = mail.search(None, "ALL")
 email_ids = messages[0].split()
@@ -73,7 +73,7 @@ def decode_date(date_):
     except ValueError:
         logging.error(f"Date parsing error: {date_}")
         return None
-
+    
 # Create a folder in Google Drive
 def create_drive_folder(folder_name, parent_folder_id):
     file_metadata = {
@@ -135,7 +135,7 @@ def process_part(part):
             if payload is not None:
                 details += payload.decode()
         except Exception as e:
-            logging.error(f"Failed to decode text part: {e}")
+            print(f"Failed to decode text part: {e}")
 
     # Log part details for debugging
     print(f"Content Type: {content_type}")
@@ -153,14 +153,8 @@ for email_id in email_ids:
             subject = decode_subject(msg["Subject"])
             from_ = msg.get("From")
             date_ = msg.get("Date")
-            decoded_date = decode_date(date_)
-
-            if decoded_date:
-                email_time = decoded_date.strftime("%H:%M:%S")
-                email_date = decoded_date.strftime("%Y-%m-%d")
-            else:
-                logging.error(f"Failed to decode date: {date_}. Skipping email.")
-                continue
+            email_time = decode_date(date_).strftime("%H:%M:%S")
+            email_date = decode_date(date_).strftime("%Y-%m-%d")
 
             # Get or create the worksheet for this date
             try:
@@ -212,16 +206,7 @@ for email_id in email_ids:
                             attachment_link = email_folder_link if has_attachment else "None"
 
             # Append the details to the worksheet
-            for attempt in range(5):
-                try:
-                    ws.append_row([email_time, from_, subject, details, attachment_link])
-                    break
-                except gspread.exceptions.APIError as e:
-                    if e.response.status_code == 429:  # Rate limit error
-                        logging.warning(f"Rate limit exceeded while appending row. Retrying in {10 * (2 ** attempt)} seconds...")
-                        time.sleep(10 * (2 ** attempt))  # Exponential backoff
-                    else:
-                        raise e
+            ws.append_row([email_time, from_, subject, details, attachment_link])
 
 # Close the connection and logout
 mail.close()
