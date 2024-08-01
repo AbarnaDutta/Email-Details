@@ -29,8 +29,22 @@ client = gspread.authorize(creds)
 drive_creds = Credentials.from_service_account_file(os.getenv('CREDENTIALS_PATH'), scopes=scope)
 drive_service = build('drive', 'v3', credentials=drive_creds)
 
+# Function to open Google Sheets with retry mechanism
+def open_sheet_with_retry(url, retries=5, delay=10):
+    for attempt in range(retries):
+        try:
+            return client.open_by_url(url)
+        except gspread.exceptions.APIError as e:
+            if e.response.status_code == 429:  # Rate limit error
+                logging.warning(f"Rate limit exceeded. Retrying in {delay} seconds...")
+                time.sleep(delay)
+                delay *= 2  # Exponential backoff
+            else:
+                raise e
+    raise Exception("Failed to open Google Sheets after multiple attempts")
+
 # Open the Google Sheets document
-spreadsheet = client.open_by_url(os.getenv('SPREADSHEET_URL'))
+spreadsheet = open_sheet_with_retry(os.getenv('SPREADSHEET_URL'))
 
 # Create an IMAP4 class with SSL
 mail = imaplib.IMAP4_SSL("imap.gmail.com")
@@ -46,19 +60,6 @@ mail.select("inbox")
 status, messages = mail.search(None, "ALL")
 email_ids = messages[0].split()
 
-def open_sheet_with_retry(url, retries=5, delay=10):
-    for attempt in range(retries):
-        try:
-            return client.open_by_url(url)
-        except gspread.exceptions.APIError as e:
-            if e.response.status_code == 429:  # Rate limit error
-                logging.warning(f"Rate limit exceeded. Retrying in {delay} seconds...")
-                time.sleep(delay)
-                delay *= 2  # Exponential backoff
-            else:
-                raise e
-    raise Exception("Failed to open Google Sheets after multiple attempts")
-
 # Function to decode email subject
 def decode_subject(subject):
     decoded, encoding = decode_header(subject)[0]
@@ -72,14 +73,14 @@ def decode_date(date_):
     if 'GMT' in date_:
         date_ = date_.replace('GMT', '+0000')
     elif '(' in date_:
-        date_ = date_.split('(')[0].strip()
+        date_.split('(')[0].strip()
 
     try:
         return datetime.strptime(date_, '%a, %d %b %Y %H:%M:%S %z')
     except ValueError:
         logging.error(f"Date parsing error: {date_}")
         return None
-    
+
 # Create a folder in Google Drive
 def create_drive_folder(folder_name, parent_folder_id):
     file_metadata = {
@@ -150,6 +151,20 @@ def process_part(part):
 
     return has_attachment, details, filename, file_data if has_attachment else None
 
+# Function to get all records with retry
+def get_all_records_with_retry(worksheet, retries=5, delay=10):
+    for attempt in range(retries):
+        try:
+            return worksheet.get_all_records()
+        except gspread.exceptions.APIError as e:
+            if e.response.status_code == 429:  # Rate limit error
+                logging.warning(f"Rate limit exceeded while getting records. Retrying in {delay} seconds...")
+                time.sleep(delay)
+                delay *= 2  # Exponential backoff
+            else:
+                raise e
+    raise Exception("Failed to get records from Google Sheets after multiple attempts")
+
 # Fetch and process each email
 for email_id in email_ids:
     status, msg_data = mail.fetch(email_id, "(RFC822)")
@@ -170,7 +185,7 @@ for email_id in email_ids:
                 ws.append_row(["Time", "From", "Subject", "Details", "Attachment"])
 
             # Check if the email is already recorded
-            records = ws.get_all_records()
+            records = get_all_records_with_retry(ws)
             already_recorded = any(record['Subject'] == subject and record['Time'] == email_time for record in records)
             if already_recorded:
                 continue
@@ -211,8 +226,17 @@ for email_id in email_ids:
                         else:
                             attachment_link = email_folder_link if has_attachment else "None"
 
-            # Append the details to the worksheet
-            ws.append_row([email_time, from_, subject, details, attachment_link])
+            # Append the details to the worksheet with retry
+            for attempt in range(5):
+                try:
+                    ws.append_row([email_time, from_, subject, details, attachment_link])
+                    break
+                except gspread.exceptions.APIError as e:
+                    if e.response.status_code == 429:  # Rate limit error
+                        logging.warning(f"Rate limit exceeded while appending row. Retrying in {10 * (2 ** attempt)} seconds...")
+                        time.sleep(10 * (2 ** attempt))  # Exponential backoff
+                    else:
+                        raise e
 
 # Close the connection and logout
 mail.close()
