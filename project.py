@@ -11,25 +11,35 @@ from google.oauth2.service_account import Credentials
 import logging
 import time
 import re
-import os
 
 # Set up logging
 logging.basicConfig(filename='email_automation.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Account credentials
-username = os.getenv('EMAIL_USERNAME')
-password = os.getenv('EMAIL_PASSWORD')
+username = 'abarnadutta1@gmail.com'
+password = "vetv ifwu scjo bccj"
 
 # Google Sheets and Drive API setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(os.getenv('CREDENTIALS_PATH'), scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name("D:\\ABARNA DUTTA\\RPA\\email details\\credentials.json", scope)
 client = gspread.authorize(creds)
 
 # Initialize Google Drive API service
-drive_creds = Credentials.from_service_account_file(os.getenv('CREDENTIALS_PATH'), scopes=scope)
+drive_creds = Credentials.from_service_account_file("D:\\ABARNA DUTTA\\RPA\\email details\\credentials.json", scopes=scope)
 drive_service = build('drive', 'v3', credentials=drive_creds)
 
-# Function to open Google Sheets with retry mechanism
+# Open the Google Sheets document
+spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1saKVvG0D-serGiqPYkPmcJKDoyojwbsZLjM2nvIm5RQ/edit?gid=0")
+
+# Create an IMAP4 class with SSL
+mail = imaplib.IMAP4_SSL("imap.gmail.com")
+
+# Authenticate
+mail.login(username, password)
+mail.select("inbox")
+status, messages = mail.search(None, "ALL")
+email_ids = messages[0].split()
+
 def open_sheet_with_retry(url, retries=5, delay=10):
     for attempt in range(retries):
         try:
@@ -42,23 +52,6 @@ def open_sheet_with_retry(url, retries=5, delay=10):
             else:
                 raise e
     raise Exception("Failed to open Google Sheets after multiple attempts")
-
-# Open the Google Sheets document
-spreadsheet = open_sheet_with_retry(os.getenv('SPREADSHEET_URL'))
-
-# Create an IMAP4 class with SSL
-mail = imaplib.IMAP4_SSL("imap.gmail.com")
-
-# Authenticate
-try:
-    mail.login(username, password)
-except imaplib.IMAP4.error as e:
-    logging.error(f"IMAP Authentication failed: {e}")
-    raise
-
-mail.select("inbox")
-status, messages = mail.search(None, "ALL")
-email_ids = messages[0].split()
 
 # Function to decode email subject
 def decode_subject(subject):
@@ -73,7 +66,7 @@ def decode_date(date_):
     if 'GMT' in date_:
         date_ = date_.replace('GMT', '+0000')
     elif '(' in date_:
-        date_.split('(')[0].strip()
+        date_ = date_.split('(')[0].strip()
 
     try:
         return datetime.strptime(date_, '%a, %d %b %Y %H:%M:%S %z')
@@ -99,7 +92,7 @@ def upload_to_drive(file_data, file_name, folder_id):
     }
     media = MediaIoBaseUpload(io.BytesIO(file_data), mimetype='application/octet-stream')
     file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-    logging.info(f'File {file_name} uploaded to Google Drive with ID: {file.get("id")}')
+    print(f'File {file_name} uploaded to Google Drive with ID: {file.get("id")}')
 
 # Extract file ID from Google Drive URL
 def extract_file_id(drive_url):
@@ -111,7 +104,7 @@ def extract_file_id(drive_url):
     return None
 
 # Google Drive parent folder ID
-drive_folder_id = os.getenv('DRIVE_FOLDER_ID')
+drive_folder_id = '1V8PmM2wLhuv8iWJbm_MqKszlhWZ6iZ5b'
 
 # Function to process each part of the email
 def process_part(part):
@@ -128,7 +121,7 @@ def process_part(part):
     if "attachment" in content_disposition or part.get_filename():
         filename = part.get_filename()
         if filename:
-            logging.info(f"Attachment found: {filename}")
+            print(f"Attachment found: {filename}")
             file_data = part.get_payload(decode=True)
             if file_data is not None:
                 has_attachment = True
@@ -145,25 +138,11 @@ def process_part(part):
             logging.error(f"Failed to decode text part: {e}")
 
     # Log part details for debugging
-    logging.debug(f"Content Type: {content_type}")
-    logging.debug(f"Content-Disposition: {content_disposition}")
-    logging.debug(f"Content Transfer Encoding: {content_transfer_encoding}")
+    print(f"Content Type: {content_type}")
+    print(f"Content-Disposition: {content_disposition}")
+    print(f"Content Transfer Encoding: {content_transfer_encoding}")
 
     return has_attachment, details, filename, file_data if has_attachment else None
-
-# Function to get all records with retry
-def get_all_records_with_retry(worksheet, retries=5, delay=10):
-    for attempt in range(retries):
-        try:
-            return worksheet.get_all_records()
-        except gspread.exceptions.APIError as e:
-            if e.response.status_code == 429:  # Rate limit error
-                logging.warning(f"Rate limit exceeded while getting records. Retrying in {delay} seconds...")
-                time.sleep(delay)
-                delay *= 2  # Exponential backoff
-            else:
-                raise e
-    raise Exception("Failed to get records from Google Sheets after multiple attempts")
 
 # Fetch and process each email
 for email_id in email_ids:
@@ -174,8 +153,14 @@ for email_id in email_ids:
             subject = decode_subject(msg["Subject"])
             from_ = msg.get("From")
             date_ = msg.get("Date")
-            email_time = decode_date(date_).strftime("%H:%M:%S")
-            email_date = decode_date(date_).strftime("%Y-%m-%d")
+            decoded_date = decode_date(date_)
+
+            if decoded_date:
+                email_time = decoded_date.strftime("%H:%M:%S")
+                email_date = decoded_date.strftime("%Y-%m-%d")
+            else:
+                logging.error(f"Failed to decode date: {date_}. Skipping email.")
+                continue
 
             # Get or create the worksheet for this date
             try:
@@ -185,7 +170,7 @@ for email_id in email_ids:
                 ws.append_row(["Time", "From", "Subject", "Details", "Attachment"])
 
             # Check if the email is already recorded
-            records = get_all_records_with_retry(ws)
+            records = ws.get_all_records()
             already_recorded = any(record['Subject'] == subject and record['Time'] == email_time for record in records)
             if already_recorded:
                 continue
@@ -226,7 +211,7 @@ for email_id in email_ids:
                         else:
                             attachment_link = email_folder_link if has_attachment else "None"
 
-            # Append the details to the worksheet with retry
+            # Append the details to the worksheet
             for attempt in range(5):
                 try:
                     ws.append_row([email_time, from_, subject, details, attachment_link])
@@ -242,4 +227,4 @@ for email_id in email_ids:
 mail.close()
 mail.logout()
 
-logging.info("Email details and attachments uploaded to Google Drive and saved to Google Sheets")
+print("Email details and attachments uploaded to Google Drive and saved to Google Sheets")
