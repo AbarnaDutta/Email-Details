@@ -182,14 +182,31 @@ for email_id in email_ids:
                 email_time = decoded_date.strftime("%H:%M:%S")
                 email_date = decoded_date.strftime("%Y-%m-%d")
             else:
-                logging.error(f"Date decoding failed for email ID {email_id}. Skipping email.")
-                continue
+                logging.error(f"Date decoding failed for email ID {email_id}. Using current date instead.")
+                email_time = datetime.now().strftime("%H:%M:%S")
+                email_date = datetime.now().strftime("%Y-%m-%d")
 
-            try:
-                ws = spreadsheet.worksheet(email_date)
-            except gspread.exceptions.WorksheetNotFound:
-                ws = spreadsheet.add_worksheet(title=email_date, rows="100", cols="20")
-                ws.append_row(["Time", "From", "Subject", "Details", "Attachment"])
+            # Retry logic for accessing worksheets
+            ws = None
+            for attempt in range(5):
+                try:
+                    ws = spreadsheet.worksheet(email_date)
+                    break
+                except gspread.exceptions.APIError as e:
+                    if e.response.status_code == 429:  # Rate limit error
+                        logging.warning(f"Rate limit exceeded while accessing worksheet. Retrying in {10 * (2 ** attempt)} seconds...")
+                        time.sleep(10 * (2 ** attempt))  # Exponential backoff
+                    else:
+                        raise e
+            if ws is None:
+                # If worksheet cannot be accessed, use a fallback worksheet with the current date
+                logging.error(f"Failed to access worksheet for date {email_date}. Using current date.")
+                email_date = datetime.now().strftime("%Y-%m-%d")
+                try:
+                    ws = spreadsheet.worksheet(email_date)
+                except gspread.exceptions.WorksheetNotFound:
+                    ws = spreadsheet.add_worksheet(title=email_date, rows="100", cols="20")
+                    ws.append_row(["Time", "From", "Subject", "Details", "Attachment"])
 
             try:
                 records = read_worksheet_with_retry(ws)
