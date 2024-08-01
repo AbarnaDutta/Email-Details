@@ -46,6 +46,12 @@ mail.select("inbox")
 status, messages = mail.search(None, "ALL")
 email_ids = messages[0].split()
 
+MAX_CELL_SIZE = 50000  # Maximum allowed characters in a Google Sheets cell
+
+# Function to split large text into chunks
+def split_text(text, max_size):
+    return [text[i:i+max_size] for i in range(0, len(text), max_size)]
+
 def open_sheet_with_retry(url, retries=5, delay=10):
     for attempt in range(retries):
         try:
@@ -68,7 +74,6 @@ def decode_subject(subject):
 
 # Function to decode email date
 def decode_date(date_):
-    # Remove any extraneous timezone information
     if 'GMT' in date_:
         date_ = date_.replace('GMT', '+0000')
     elif '(' in date_:
@@ -159,17 +164,20 @@ for email_id in email_ids:
             subject = decode_subject(msg["Subject"])
             from_ = msg.get("From")
             date_ = msg.get("Date")
-            email_time = decode_date(date_).strftime("%H:%M:%S")
-            email_date = decode_date(date_).strftime("%Y-%m-%d")
+            decoded_date = decode_date(date_)
+            if decoded_date:
+                email_time = decoded_date.strftime("%H:%M:%S")
+                email_date = decoded_date.strftime("%Y-%m-%d")
+            else:
+                logging.error(f"Date decoding failed for email ID {email_id}. Skipping email.")
+                continue
 
-            # Get or create the worksheet for this date
             try:
                 ws = spreadsheet.worksheet(email_date)
             except gspread.exceptions.WorksheetNotFound:
                 ws = spreadsheet.add_worksheet(title=email_date, rows="100", cols="20")
                 ws.append_row(["Time", "From", "Subject", "Details", "Attachment"])
 
-            # Check if the email is already recorded
             records = ws.get_all_records()
             already_recorded = any(record['Subject'] == subject and record['Time'] == email_time for record in records)
             if already_recorded:
@@ -184,21 +192,17 @@ for email_id in email_ids:
                     part_has_attachment, part_details, filename, file_data = process_part(part)
                     if part_has_attachment:
                         if not email_folder_id:
-                            # Create a new folder for this email's attachments
                             email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
                         upload_to_drive(file_data, filename, email_folder_id)
                         has_attachment = True
                     if part_details:
                         details += part_details
-
             else:
                 has_attachment, details, filename, file_data = process_part(msg)
                 if has_attachment:
-                    # Create a new folder for this email's attachments
                     email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
                     upload_to_drive(file_data, filename, email_folder_id)
 
-            # Check for Google Drive links in email body
             attachment_link = "None"
             for part in msg.walk():
                 if part.get_content_type() in ["text/plain", "text/html"]:
@@ -211,8 +215,13 @@ for email_id in email_ids:
                         else:
                             attachment_link = email_folder_link if has_attachment else "None"
 
-            # Append the details to the worksheet
-            ws.append_row([email_time, from_, subject, details, attachment_link])
+            # Handle the `details` field size
+            if len(details) > MAX_CELL_SIZE:
+                details_chunks = split_text(details, MAX_CELL_SIZE)
+                for chunk in details_chunks:
+                    ws.append_row([email_time, from_, subject, chunk, attachment_link])
+            else:
+                ws.append_row([email_time, from_, subject, details, attachment_link])
 
 # Close the connection and logout
 mail.close()
