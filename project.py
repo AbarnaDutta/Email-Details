@@ -11,30 +11,36 @@ from google.oauth2.service_account import Credentials
 import logging
 import time
 import re
+import os
 
+# Set up logging
+logging.basicConfig(filename='email_automation.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Account credentials
-username = 'abarnadutta1@gmail.com'
-password = "vetv ifwu scjo bccj"
+username = os.getenv('EMAIL_USERNAME')
+password = os.getenv('EMAIL_PASSWORD')
 
 # Google Sheets and Drive API setup
-scope = ["https://spreadsheets.google.com/feeds", 
-         "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("D:\\ABARNA DUTTA\\RPA\\email details\\credentials.json", scope)
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name(os.getenv('CREDENTIALS_PATH'), scope)
 client = gspread.authorize(creds)
 
 # Initialize Google Drive API service
-drive_creds = Credentials.from_service_account_file("D:\\ABARNA DUTTA\\RPA\\email details\\credentials.json", scopes=scope)
+drive_creds = Credentials.from_service_account_file(os.getenv('CREDENTIALS_PATH'), scopes=scope)
 drive_service = build('drive', 'v3', credentials=drive_creds)
 
 # Open the Google Sheets document
-spreadsheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1saKVvG0D-serGiqPYkPmcJKDoyojwbsZLjM2nvIm5RQ/edit?gid=0")
+spreadsheet = client.open_by_url(os.getenv('SPREADSHEET_URL'))
 
 # Create an IMAP4 class with SSL
 mail = imaplib.IMAP4_SSL("imap.gmail.com")
 
 # Authenticate
-mail.login(username, password)
+try:
+    mail.login(username, password)
+except imaplib.IMAP4.error as e:
+    logging.error(f"IMAP Authentication failed: {e}")
+    raise
 
 mail.select("inbox")
 status, messages = mail.search(None, "ALL")
@@ -92,7 +98,7 @@ def upload_to_drive(file_data, file_name, folder_id):
     }
     media = MediaIoBaseUpload(io.BytesIO(file_data), mimetype='application/octet-stream')
     file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-    print(f'File {file_name} uploaded to Google Drive with ID: {file.get("id")}')
+    logging.info(f'File {file_name} uploaded to Google Drive with ID: {file.get("id")}')
 
 # Extract file ID from Google Drive URL
 def extract_file_id(drive_url):
@@ -104,7 +110,7 @@ def extract_file_id(drive_url):
     return None
 
 # Google Drive parent folder ID
-drive_folder_id = '1V8PmM2wLhuv8iWJbm_MqKszlhWZ6iZ5b'
+drive_folder_id = os.getenv('DRIVE_FOLDER_ID')
 
 # Function to process each part of the email
 def process_part(part):
@@ -121,7 +127,7 @@ def process_part(part):
     if "attachment" in content_disposition or part.get_filename():
         filename = part.get_filename()
         if filename:
-            print(f"Attachment found: {filename}")
+            logging.info(f"Attachment found: {filename}")
             file_data = part.get_payload(decode=True)
             if file_data is not None:
                 has_attachment = True
@@ -135,12 +141,12 @@ def process_part(part):
             if payload is not None:
                 details += payload.decode()
         except Exception as e:
-            print(f"Failed to decode text part: {e}")
+            logging.error(f"Failed to decode text part: {e}")
 
     # Log part details for debugging
-    print(f"Content Type: {content_type}")
-    print(f"Content-Disposition: {content_disposition}")
-    print(f"Content Transfer Encoding: {content_transfer_encoding}")
+    logging.debug(f"Content Type: {content_type}")
+    logging.debug(f"Content-Disposition: {content_disposition}")
+    logging.debug(f"Content Transfer Encoding: {content_transfer_encoding}")
 
     return has_attachment, details, filename, file_data if has_attachment else None
 
@@ -212,4 +218,4 @@ for email_id in email_ids:
 mail.close()
 mail.logout()
 
-print("Email details and attachments uploaded to Google Drive and saved to Google Sheets")
+logging.info("Email details and attachments uploaded to Google Drive and saved to Google Sheets")
