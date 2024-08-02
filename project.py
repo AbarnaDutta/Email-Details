@@ -59,6 +59,20 @@ def open_sheet_with_retry(url, retries=5, delay=10):
                 raise e
     raise Exception("Failed to open Google Sheets after multiple attempts")
 
+def retry_api_call(func, *args, retries=5, delay=10, backoff=2):
+    for attempt in range(retries):
+        try:
+            return func(*args)
+        except gspread.exceptions.APIError as e:
+            if e.response.status_code == 429:  # Rate limit error
+                logging.warning(f"Rate limit exceeded. Retrying in {delay} seconds...")
+                time.sleep(delay)
+                delay *= backoff  # Exponential backoff
+                delay += random.uniform(0, 1)  # Add jitter
+            else:
+                raise e
+    raise Exception("Failed to complete API call after multiple attempts")
+
 # Function to decode email subject
 def decode_subject(subject):
     decoded, encoding = decode_header(subject)[0]
@@ -72,14 +86,14 @@ def decode_date(date_):
     if 'GMT' in date_:
         date_ = date_.replace('GMT', '+0000')
     elif '(' in date_:
-        date_ = date_.split('(')[0].strip()
+        date_ = date_.split('('')[0].strip()
 
     try:
         return datetime.strptime(date_, '%a, %d %b %Y %H:%M:%S %z')
     except ValueError:
         logging.error(f"Date parsing error: {date_}")
         return None
-    
+
 # Create a folder in Google Drive
 def create_drive_folder(folder_name, parent_folder_id):
     file_metadata = {
@@ -169,7 +183,7 @@ for email_id in email_ids:
             ws = get_or_create_worksheet(email_date)
 
             # Check if the email is already recorded
-            records = ws.get_all_records()
+            records = retry_api_call(ws.get_all_records)
             already_recorded = any(record['Subject'] == subject and record['Time'] == email_time for record in records)
             if already_recorded:
                 continue
