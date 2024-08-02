@@ -11,7 +11,8 @@ from google.oauth2.service_account import Credentials
 import logging
 import time
 import re
-import os
+import random
+
 
 # Account credentials
 username = os.getenv('EMAIL_USERNAME')
@@ -108,6 +109,9 @@ def extract_file_id(drive_url):
             logging.error(f"Failed to extract file ID from URL: {drive_url}")
     return None
 
+# Google Drive parent folder ID
+drive_folder_id = '1V8PmM2wLhuv8iWJbm_MqKszlhWZ6iZ5b'
+
 # Function to process each part of the email
 def process_part(part):
     content_disposition = str(part.get("Content-Disposition"))
@@ -196,6 +200,12 @@ for email_id in email_ids:
                     email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
                     upload_to_drive(file_data, filename, email_folder_id)
 
+            # Truncate details to fit within the 50,000 character limit
+            max_chars = 50000
+            truncated_details = details[:max_chars]
+            if len(details) > max_chars:
+                truncated_details += "\n[Truncated]"
+
             # Check for Google Drive links in email body
             attachment_link = "None"
             for part in msg.walk():
@@ -209,12 +219,8 @@ for email_id in email_ids:
                         else:
                             attachment_link = email_folder_link if has_attachment else "None"
 
-            # Truncate details if it exceeds 50,000 characters
-            if len(details) > 50000:
-                details = details[:50000] + "... [truncated]"
-
             # Append the details to the worksheet
-            ws.append_row([email_time, from_, subject, details, attachment_link])
+            ws.append_row([email_time, from_, subject, truncated_details, attachment_link])
 
 # Close the connection and logout
 mail.close()
