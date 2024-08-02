@@ -29,11 +29,6 @@ drive_service = build('drive', 'v3', credentials=drive_creds)
 # Open the Google Sheets document
 spreadsheet = client.open_by_url(os.getenv('SPREADSHEET_URL'))
 
-# Google Sheets and Drive API setup
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(os.getenv('CREDENTIALS_PATH'), scope)
-client = gspread.authorize(creds)
-
 # Google Drive parent folder ID
 drive_folder_id = os.getenv('DRIVE_FOLDER_ID')
 
@@ -112,9 +107,6 @@ def extract_file_id(drive_url):
         except IndexError:
             logging.error(f"Failed to extract file ID from URL: {drive_url}")
     return None
-
-# Google Drive parent folder ID
-drive_folder_id = '1V8PmM2wLhuv8iWJbm_MqKszlhWZ6iZ5b'
 
 # Function to process each part of the email
 def process_part(part):
@@ -217,6 +209,10 @@ for email_id in email_ids:
                         else:
                             attachment_link = email_folder_link if has_attachment else "None"
 
+            # Truncate details if it exceeds 50,000 characters
+            if len(details) > 50000:
+                details = details[:50000] + "... [truncated]"
+
             # Append the details to the worksheet
             ws.append_row([email_time, from_, subject, details, attachment_link])
 
@@ -225,4 +221,3 @@ mail.close()
 mail.logout()
 
 print("Email details and attachments uploaded to Google Drive and saved to Google Sheets")
-
