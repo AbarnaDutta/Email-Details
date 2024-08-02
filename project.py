@@ -210,12 +210,17 @@ for email_id in email_ids:
                         else:
                             attachment_link = email_folder_link if has_attachment else "None"
 
-            # Truncate details if it exceeds 50,000 characters
-            if len(details) > 50000:
-                details = details[:50000] + "... [truncated]"
-
-            # Append the details to the worksheet
-            ws.append_row([email_time, from_, subject, details, attachment_link])
+            # Truncate details if it exceeds 50,000 characters and split into multiple rows
+            max_length = 50000
+            if len(details) > max_length:
+                parts = [details[i:i+max_length] for i in range(0, len(details), max_length)]
+                for i, part in enumerate(parts):
+                    if i == 0:
+                        ws.append_row([email_time, from_, subject, part, attachment_link])
+                    else:
+                        ws.append_row(["", "", "", part, ""])
+            else:
+                ws.append_row([email_time, from_, subject, details, attachment_link])
 
 # Close the connection and logout
 mail.close()
