@@ -86,7 +86,7 @@ def decode_date(date_):
     if 'GMT' in date_:
         date_ = date_.replace('GMT', '+0000')
     elif '(' in date_:
-        date_ = date_.split('('')[0].strip()
+        date_ = date_.split('(')[0].strip()
 
     try:
         return datetime.strptime(date_, '%a, %d %b %Y %H:%M:%S %z')
