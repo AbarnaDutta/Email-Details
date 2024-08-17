@@ -11,11 +11,15 @@ from google.oauth2.service_account import Credentials
 import logging
 import time
 import re
-import os
 import random
+import os
+import json
+from pathlib import Path
+from azure.ai.formrecognizer import DocumentAnalysisClient
+from azure.core.credentials import AzureKeyCredential
 
 # Account credentials
-username = os.getenv('EMAIL_USERNAME')
+username = os.getenv('EMAIL_USERNAME')  
 password = os.getenv('EMAIL_PASSWORD')
 
 # Google Sheets and Drive API setup
@@ -28,10 +32,11 @@ drive_creds = Credentials.from_service_account_file(os.getenv('CREDENTIALS_PATH'
 drive_service = build('drive', 'v3', credentials=drive_creds)
 
 # Open the Google Sheets document
-spreadsheet = client.open_by_url(os.getenv('SPREADSHEET_URL'))
+spreadsheet_url = os.getenv('SPREADSHEET_URL')
+spreadsheet = client.open_by_url(spreadsheet_url)
 
 # Google Drive parent folder ID
-drive_folder_id = os.getenv('DRIVE_FOLDER_ID')
+parent_folder_id = os.getenv('DRIVE_FOLDER_ID')
 
 # Create a cache for worksheets
 worksheet_cache = {ws.title: ws for ws in spreadsheet.worksheets()}
@@ -41,23 +46,9 @@ def get_or_create_worksheet(sheet_name):
         return worksheet_cache[sheet_name]
     else:
         ws = spreadsheet.add_worksheet(title=sheet_name, rows="100", cols="20")
-        ws.append_row(["Time", "From", "Subject", "Details", "Attachment"])
+        ws.append_row(["Date", "Time", "From", "Subject", "Details", "Attachment"])
         worksheet_cache[sheet_name] = ws
         return ws
-
-def open_sheet_with_retry(url, retries=5, delay=10):
-    for attempt in range(retries):
-        try:
-            return client.open_by_url(url)
-        except gspread.exceptions.APIError as e:
-            if e.response.status_code == 429:  # Rate limit error
-                logging.warning(f"Rate limit exceeded. Retrying in {delay} seconds...")
-                time.sleep(delay)
-                delay *= 2  # Exponential backoff
-                delay += random.uniform(0, 1)  # Add jitter
-            else:
-                raise e
-    raise Exception("Failed to open Google Sheets after multiple attempts")
 
 def retry_api_call(func, *args, retries=5, delay=10, backoff=2):
     for attempt in range(retries):
@@ -73,28 +64,23 @@ def retry_api_call(func, *args, retries=5, delay=10, backoff=2):
                 raise e
     raise Exception("Failed to complete API call after multiple attempts")
 
-# Function to decode email subject
 def decode_subject(subject):
     decoded, encoding = decode_header(subject)[0]
     if isinstance(decoded, bytes):
         return decoded.decode(encoding if encoding else "utf-8")
     return decoded
 
-# Function to decode email date
 def decode_date(date_):
-    # Remove any extraneous timezone information
     if 'GMT' in date_:
         date_ = date_.replace('GMT', '+0000')
     elif '(' in date_:
         date_ = date_.split('(')[0].strip()
-
     try:
         return datetime.strptime(date_, '%a, %d %b %Y %H:%M:%S %z')
     except ValueError:
         logging.error(f"Date parsing error: {date_}")
         return None
 
-# Create a folder in Google Drive
 def create_drive_folder(folder_name, parent_folder_id):
     file_metadata = {
         'name': folder_name,
@@ -104,7 +90,6 @@ def create_drive_folder(folder_name, parent_folder_id):
     folder = drive_service.files().create(body=file_metadata, fields='id, webViewLink').execute()
     return folder.get('id'), folder.get('webViewLink')
 
-# Upload a file to Google Drive
 def upload_to_drive(file_data, file_name, folder_id):
     file_metadata = {
         'name': file_name,
@@ -114,7 +99,6 @@ def upload_to_drive(file_data, file_name, folder_id):
     file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
     print(f'File {file_name} uploaded to Google Drive with ID: {file.get("id")}')
 
-# Extract file ID from Google Drive URL
 def extract_file_id(drive_url):
     if 'drive.google.com' in drive_url:
         try:
@@ -123,18 +107,30 @@ def extract_file_id(drive_url):
             logging.error(f"Failed to extract file ID from URL: {drive_url}")
     return None
 
-# Function to process each part of the email
+def get_or_create_monthly_folder(year_month):
+    query = f"name='{year_month}' and mimeType='application/vnd.google-apps.folder' and '{parent_folder_id}' in parents"
+    results = drive_service.files().list(q=query, fields="files(id)").execute()
+    folders = results.get('files', [])
+    if folders:
+        return folders[0]['id']
+
+    file_metadata = {
+        'name': year_month,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent_folder_id]
+    }
+    folder = drive_service.files().create(body=file_metadata, fields='id').execute()
+    return folder.get('id')
+
 def process_part(part):
-    content_disposition = str(part.get("Content-Disposition"))
+    content_disposition = str(part.get("Content-Disposition", ""))
     content_type = part.get_content_type()
     content_transfer_encoding = part.get("Content-Transfer-Encoding", "")
 
     has_attachment = False
-    details = ""
     filename = None
     file_data = None
 
-    # Check if the part is an attachment
     if "attachment" in content_disposition or part.get_filename():
         filename = part.get_filename()
         if filename:
@@ -145,21 +141,91 @@ def process_part(part):
             else:
                 logging.error(f"Failed to decode attachment: {filename}")
 
-    # Handle text/plain and text/html parts separately
     if content_type in ["text/plain", "text/html"] and not "attachment" in content_disposition:
         try:
             payload = part.get_payload(decode=True)
             if payload is not None:
-                details += payload.decode()
+                pass
         except Exception as e:
             print(f"Failed to decode text part: {e}")
 
-    # Log part details for debugging
     print(f"Content Type: {content_type}")
     print(f"Content-Disposition: {content_disposition}")
     print(f"Content Transfer Encoding: {content_transfer_encoding}")
 
-    return has_attachment, details, filename, file_data if has_attachment else None
+    return has_attachment, filename, file_data
+
+class DocumentExtractor:
+    def __init__(self, endpoint: str, key: str, invoice_model: str, receipt_model: str):
+        self.document_analysis_client = DocumentAnalysisClient(
+            endpoint=endpoint, credential=AzureKeyCredential(key)
+        )
+        self.invoice_model_id = invoice_model
+        self.receipt_model_id = receipt_model
+
+    def extract_document_data(self, file_path: Path) -> dict:
+        model_id = self.receipt_model_id if "receipt" in file_path.name.lower() else self.invoice_model_id
+
+        with open(file_path, "rb") as f:
+            poller = self.document_analysis_client.begin_analyze_document(
+                model_id, document=f, locale="en-US"
+            )
+        documents = poller.result()
+
+        document_data = {
+            "invoice_number": None,
+            "invoice_date": None,
+            "invoice_amount": None,
+            "vendor_name": None,
+        }
+
+        with open(file_path, "rb") as f:
+            poller = self.document_analysis_client.begin_analyze_document(
+                self.invoice_model_id, document=f, locale="en-US"
+            )
+        invoice_documents = poller.result()
+        
+        for document in invoice_documents.documents:
+            document_data["invoice_number"] = (
+                document.fields.get("InvoiceId").value if document.fields.get("InvoiceId") else None
+            )
+
+        for document in documents.documents:
+            if model_id == self.invoice_model_id:
+                document_data["invoice_date"] = (
+                    document.fields.get("InvoiceDate").value.strftime("%Y-%m-%d") if document.fields.get("InvoiceDate") and document.fields.get("InvoiceDate").value else None
+                )
+
+                document_data["invoice_amount"] = (
+                    document.fields.get("InvoiceTotal").value.amount if document.fields.get("InvoiceTotal") else None
+                )
+
+                document_data["vendor_name"] = (
+                    document.fields.get("VendorName").value if document.fields.get("VendorName") else None
+                )
+
+            elif model_id == self.receipt_model_id:
+                document_data["invoice_date"] = (
+                    document.fields.get("TransactionDate").value.strftime("%Y-%m-%d") if document.fields.get("TransactionDate") and document.fields.get("TransactionDate").value else None
+                )
+
+                document_data["invoice_amount"] = (
+                    document.fields.get("Total").value if document.fields.get("Total") else None
+                )
+
+                document_data["vendor_name"] = (
+                    document.fields.get("MerchantName").value if document.fields.get("MerchantName") else None
+                )
+
+        return document_data
+
+# Initialize DocumentExtractor with Azure OCR credentials and model IDs
+document_extractor = DocumentExtractor(
+    endpoint=os.getenv("AZURE_ENDPOINT"),
+    key=os.getenv("AZURE_KEY"),
+    invoice_model="prebuilt-invoice",
+    receipt_model="prebuilt-receipt"
+)
 
 # Fetch and process each email
 mail = imaplib.IMAP4_SSL("imap.gmail.com")
@@ -178,40 +244,56 @@ for email_id in email_ids:
             date_ = msg.get("Date")
             email_time = decode_date(date_).strftime("%H:%M:%S")
             email_date = decode_date(date_).strftime("%Y-%m-%d")
+            year_month = decode_date(date_).strftime("%Y-%m")
 
-            # Get or create the worksheet for this date
-            ws = get_or_create_worksheet(email_date)
+            ws = get_or_create_worksheet(year_month)
 
-            # Check if the email is already recorded
-            records = retry_api_call(ws.get_all_records)
-            already_recorded = any(record['Subject'] == subject and record['Time'] == email_time for record in records)
+            records = ws.get_all_records()
+            already_recorded = any(record['Date'] == email_date and record['Time'] == email_time for record in records)
             if already_recorded:
                 continue
 
             has_attachment = False
             details = ""
-            email_folder_id, email_folder_link = None, None
+            email_folder_id = None
+            email_folder_link = None
 
             if msg.is_multipart():
                 for part in msg.walk():
-                    part_has_attachment, part_details, filename, file_data = process_part(part)
+                    part_has_attachment, filename, file_data = process_part(part)
                     if part_has_attachment:
-                        if not email_folder_id:
-                            # Create a new folder for this email's attachments
-                            email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
+                        if email_folder_id is None:
+                            month_folder_id = get_or_create_monthly_folder(year_month)
+                            email_folder_id, email_folder_link = create_drive_folder(subject, month_folder_id)
                         upload_to_drive(file_data, filename, email_folder_id)
                         has_attachment = True
-                    if part_details:
-                        details += part_details
+                        
+                        temp_path = Path(f"temp_{filename}")
+                        with open(temp_path, "wb") as temp_file:
+                            temp_file.write(file_data)
+                        extracted_data = document_extractor.extract_document_data(temp_path)
+                        temp_path.unlink()  # Remove temporary file
+
+                        formatted_data = json.dumps(extracted_data)
+                        details += formatted_data
 
             else:
-                has_attachment, details, filename, file_data = process_part(msg)
+                has_attachment, filename, file_data = process_part(msg)
                 if has_attachment:
-                    # Create a new folder for this email's attachments
-                    email_folder_id, email_folder_link = create_drive_folder(subject, drive_folder_id)
+                    month_folder_id = get_or_create_monthly_folder(year_month)
+                    email_folder_id, email_folder_link = create_drive_folder(subject, month_folder_id)
                     upload_to_drive(file_data, filename, email_folder_id)
+                    has_attachment = True
+                    
+                    temp_path = Path(f"temp_{filename}")
+                    with open(temp_path, "wb") as temp_file:
+                        temp_file.write(file_data)
+                    extracted_data = document_extractor.extract_document_data(temp_path)
+                    temp_path.unlink()
 
-            # Check for Google Drive links in email body
+                    formatted_data = json.dumps(extracted_data)
+                    details += formatted_data
+
             attachment_link = "None"
             for part in msg.walk():
                 if part.get_content_type() in ["text/plain", "text/html"]:
@@ -224,20 +306,10 @@ for email_id in email_ids:
                         else:
                             attachment_link = email_folder_link if has_attachment else "None"
 
-            # Truncate details if it exceeds 50,000 characters and split into multiple rows
-            max_length = 50000
-            if len(details) > max_length:
-                parts = [details[i:i+max_length] for i in range(0, len(details), max_length)]
-                for i, part in enumerate(parts):
-                    if i == 0:
-                        ws.append_row([email_time, from_, subject, part, attachment_link])
-                    else:
-                        ws.append_row(["", "", "", part, ""])
-            else:
-                ws.append_row([email_time, from_, subject, details, attachment_link])
+            ws.append_row([email_date, email_time, from_, subject, details if has_attachment else "None", attachment_link if has_attachment else "None"])
 
 # Close the connection and logout
 mail.close()
 mail.logout()
 
-print("Email details and attachments uploaded to Google Drive and saved to Google Sheets")
+print("Email details and attachments uploaded to Google Drive and recorded in Google Sheets.")
