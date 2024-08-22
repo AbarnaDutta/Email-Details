@@ -225,6 +225,24 @@ class DocumentExtractor:
                 )
 
         return document_data
+    def get_currency_symbol(self, text: str) -> str:
+        """
+        Extract the currency symbol from the text and convert any Unicode escape sequences.
+        """
+        # Regex to match common currency symbols or Unicode sequences just before the amount
+        currency_symbols_pattern = r"([€£$¥₹])|\\u([0-9a-fA-F]{4})"
+        
+        # Search for a currency symbol or Unicode sequence in the text
+        match = re.search(currency_symbols_pattern, text)
+        
+        if match:
+            if match.group(1):
+                return match.group(1)  # Directly return the symbol (€, £, $, etc.)
+            elif match.group(2):
+                # Convert the Unicode sequence to an actual character
+                return chr(int(match.group(2), 16))
+        return ""  # Return empty if no symbol is found
+
 
 # Initialize DocumentExtractor with Azure OCR credentials and model IDs
 document_extractor = DocumentExtractor(
