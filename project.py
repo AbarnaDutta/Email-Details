@@ -17,6 +17,9 @@ import json
 from pathlib import Path
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
+import sys
+
+sys.stdout.reconfigure(encoding='utf-8')
 
 # Account credentials
 username = os.getenv('EMAIL_USERNAME')  
@@ -196,9 +199,11 @@ class DocumentExtractor:
                     document.fields.get("InvoiceDate").value.strftime("%Y-%m-%d") if document.fields.get("InvoiceDate") and document.fields.get("InvoiceDate").value else None
                 )
 
-                document_data["invoice_amount"] = (
-                    document.fields.get("InvoiceTotal").value.amount if document.fields.get("InvoiceTotal") else None
-                )
+                if document.fields.get("InvoiceTotal"):
+                    invoice_total_text = document.fields.get("InvoiceTotal").content  # Get the raw text
+                    amount = document.fields.get("InvoiceTotal").value.amount
+                    currency_symbol = self.get_currency_symbol(invoice_total_text)
+                    document_data["invoice_amount"] = f"{currency_symbol}{amount}"
 
                 document_data["vendor_name"] = (
                     document.fields.get("VendorName").value if document.fields.get("VendorName") else None
@@ -209,9 +214,11 @@ class DocumentExtractor:
                     document.fields.get("TransactionDate").value.strftime("%Y-%m-%d") if document.fields.get("TransactionDate") and document.fields.get("TransactionDate").value else None
                 )
 
-                document_data["invoice_amount"] = (
-                    document.fields.get("Total").value if document.fields.get("Total") else None
-                )
+                if document.fields.get("Total"):
+                    total_text = document.fields.get("Total").content  # Get the raw text
+                    amount = document.fields.get("Total").value
+                    currency_symbol = self.get_currency_symbol(total_text)
+                    document_data["invoice_amount"] = f"{currency_symbol}{amount}"
 
                 document_data["vendor_name"] = (
                     document.fields.get("MerchantName").value if document.fields.get("MerchantName") else None
@@ -274,7 +281,7 @@ for email_id in email_ids:
                         extracted_data = document_extractor.extract_document_data(temp_path)
                         temp_path.unlink()  # Remove temporary file
 
-                        formatted_data = json.dumps(extracted_data)
+                        formatted_data = json.dumps(extracted_data,ensure_ascii=False, indent=4)
                         details += formatted_data
 
             else:
@@ -291,7 +298,7 @@ for email_id in email_ids:
                     extracted_data = document_extractor.extract_document_data(temp_path)
                     temp_path.unlink()
 
-                    formatted_data = json.dumps(extracted_data)
+                    formatted_data = json.dumps(extracted_data,ensure_ascii=False, indent=4)
                     details += formatted_data
 
             attachment_link = "None"
