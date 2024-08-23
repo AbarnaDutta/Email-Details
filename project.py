@@ -268,14 +268,15 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
     # Retrieve all records from the worksheet
     records = ws.get_all_records()
 
-    # Check if a record with the same email date, time, and different key fields exists
-    match_found = False
+    # Convert extracted data to a formatted string
+    new_details = json.dumps(extracted_data, ensure_ascii=False, indent=4)
+
+    # Check if a record with the same email date, time, and exact details exists
+    record_exists = False
     for record in records:
         if record['Date'] == email_date and record['Time'] == email_time:
-            if (
-                record['Details'] != json.dumps(extracted_data, ensure_ascii=False, indent=4)
-            ):
-                match_found = True
+            if record['Details'] == new_details:
+                record_exists = True
                 break
 
     # If no exact match is found, update the record
