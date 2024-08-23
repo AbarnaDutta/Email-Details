@@ -253,8 +253,9 @@ document_extractor = DocumentExtractor(
     receipt_model="prebuilt-receipt"
 )
 
+
 def process_email_attachment(email_date, email_time, from_, subject, part, extracted_data):
-    invoice_date = extracted_data["invoice_date"]
+    invoice_date = extracted_data.get("invoice_date")
     if not invoice_date:
         print("No invoice date found in the attachment.")
         return
@@ -274,6 +275,8 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
     )
     normalized_extracted_data = json.loads(normalized_extracted_data)
 
+    print("Normalized Extracted Data:", normalized_extracted_data)
+
     # Check if a record with the same email date, time, and different key fields exists
     match_found = False
     for record in records:
@@ -285,6 +288,8 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
         )
         normalized_record_details = json.loads(normalized_record_details)
 
+        print("Normalized Record Details:", normalized_record_details)
+
         # Compare each relevant field
         if (
             record['Date'] == email_date and
@@ -294,11 +299,18 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
             normalized_record_details.get('invoice_amount') == normalized_extracted_data.get('invoice_amount') and
             normalized_record_details.get('vendor_name') == normalized_extracted_data.get('vendor_name')
         ):
+            print("Match found with the existing record.")
             match_found = True
             break
+        else:
+            print("No match found for this record.")
+
+    # Check the value of match_found after the loop
+    print(f"Match found status after loop: {match_found}")
 
     # If no exact match is found, update the record
     if not match_found:
+        print("No exact match found, appending new record to the sheet.")
         # Get or create the corresponding month folder in Google Drive
         month_folder_id = get_or_create_monthly_folder(year_month)
 
@@ -318,6 +330,7 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
         print(f"Record updated for email from {from_} with subject {subject}.")
     else:
         print(f"Email from {from_} with subject {subject} already exists with the same details.")
+
 
     
 # Fetch and process each email
