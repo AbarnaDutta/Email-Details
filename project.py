@@ -252,6 +252,42 @@ document_extractor = DocumentExtractor(
     receipt_model="prebuilt-receipt"
 )
 
+def process_email_attachment(email_date, email_time, from_, subject, part, extracted_data):
+    invoice_date = extracted_data["invoice_date"]
+    if not invoice_date:
+        print("No invoice date found in the attachment.")
+        return
+
+    # Determine year-month from the invoice date
+    year_month = datetime.strptime(invoice_date, "%Y-%m-%d").strftime("%Y-%m")
+
+    # Get or create the correct worksheet
+    ws = get_or_create_worksheet(year_month)
+
+    # Check if the record already exists based on email date and time
+    records = ws.get_all_records()
+    already_recorded = any(record['Date'] == email_date and record['Time'] == email_time for record in records)
+    if already_recorded:
+        print(f"Email from {from_} with subject {subject} is already recorded.")
+        return
+
+    # Get or create the corresponding month folder in Google Drive
+    month_folder_id = get_or_create_monthly_folder(year_month)
+
+    # Create a folder for the email subject within the month folder
+    email_folder_id, email_folder_link = create_drive_folder(subject, month_folder_id)
+
+    # Upload the attachment to the Drive folder
+    filename = part.get_filename()
+    file_data = part.get_payload(decode=True)
+    upload_to_drive(file_data, filename, email_folder_id)
+
+    # Convert extracted data to a formatted string
+    details = json.dumps(extracted_data, ensure_ascii=False, indent=4)
+
+    # Update the Google Sheet
+    ws.append_row([email_date, email_time, from_, subject, details, email_folder_link])
+    
 # Fetch and process each email
 mail = imaplib.IMAP4_SSL("imap.gmail.com")
 mail.login(username, password)
@@ -269,69 +305,28 @@ for email_id in email_ids:
             date_ = msg.get("Date")
             email_time = decode_date(date_).strftime("%H:%M:%S")
             email_date = decode_date(date_).strftime("%Y-%m-%d")
-            year_month = decode_date(date_).strftime("%Y-%m")
-
-            ws = get_or_create_worksheet(year_month)
-
-            records = ws.get_all_records()
-            already_recorded = any(record['Date'] == email_date and record['Time'] == email_time for record in records)
-            if already_recorded:
-                continue
-
-            has_attachment = False
-            details = ""
-            email_folder_id = None
-            email_folder_link = None
 
             if msg.is_multipart():
                 for part in msg.walk():
                     part_has_attachment, filename, file_data = process_part(part)
                     if part_has_attachment:
-                        if email_folder_id is None:
-                            month_folder_id = get_or_create_monthly_folder(year_month)
-                            email_folder_id, email_folder_link = create_drive_folder(subject, month_folder_id)
-                        upload_to_drive(file_data, filename, email_folder_id)
-                        has_attachment = True
-                        
                         temp_path = Path(f"temp_{filename}")
                         with open(temp_path, "wb") as temp_file:
                             temp_file.write(file_data)
                         extracted_data = document_extractor.extract_document_data(temp_path)
                         temp_path.unlink()  # Remove temporary file
-
-                        formatted_data = json.dumps(extracted_data,ensure_ascii=False, indent=4)
-                        details += formatted_data
+                        process_email_attachment(email_date, email_time, from_, subject, part, extracted_data)
 
             else:
                 has_attachment, filename, file_data = process_part(msg)
                 if has_attachment:
-                    month_folder_id = get_or_create_monthly_folder(year_month)
-                    email_folder_id, email_folder_link = create_drive_folder(subject, month_folder_id)
-                    upload_to_drive(file_data, filename, email_folder_id)
-                    has_attachment = True
-                    
                     temp_path = Path(f"temp_{filename}")
                     with open(temp_path, "wb") as temp_file:
                         temp_file.write(file_data)
                     extracted_data = document_extractor.extract_document_data(temp_path)
                     temp_path.unlink()
 
-                    formatted_data = json.dumps(extracted_data,ensure_ascii=False, indent=4)
-                    details += formatted_data
-
-            attachment_link = "None"
-            for part in msg.walk():
-                if part.get_content_type() in ["text/plain", "text/html"]:
-                    body = part.get_payload(decode=True)
-                    if body:
-                        body_str = body.decode()
-                        links = re.findall(r'(https://drive\.google\.com[^\s]+)', body_str)
-                        if links:
-                            attachment_link = " | ".join(links)
-                        else:
-                            attachment_link = email_folder_link if has_attachment else "None"
-
-            ws.append_row([email_date, email_time, from_, subject, details if has_attachment else "None", attachment_link if has_attachment else "None"])
+                    process_email_attachment(email_date, email_time, from_, subject, msg, extracted_data)
 
 # Close the connection and logout
 mail.close()
