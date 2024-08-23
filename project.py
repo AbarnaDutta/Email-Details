@@ -225,6 +225,7 @@ class DocumentExtractor:
                 )
 
         return document_data
+        
     def get_currency_symbol(self, text: str) -> str:
         """
         Extract the currency symbol from the text and convert any Unicode escape sequences.
@@ -264,29 +265,41 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
     # Get or create the correct worksheet
     ws = get_or_create_worksheet(year_month)
 
-    # Check if the record already exists based on email date and time
+    # Retrieve all records from the worksheet
     records = ws.get_all_records()
-    already_recorded = any(record['Date'] == email_date and record['Time'] == email_time for record in records)
-    if already_recorded:
-        print(f"Email from {from_} with subject {subject} is already recorded.")
-        return
 
-    # Get or create the corresponding month folder in Google Drive
-    month_folder_id = get_or_create_monthly_folder(year_month)
+    # Check if a record with the same email date, time, and different key fields exists
+    match_found = False
+    for record in records:
+        if record['Date'] == email_date and record['Time'] == email_time:
+            if (
+                record['Details'] != json.dumps(extracted_data, ensure_ascii=False, indent=4)
+            ):
+                match_found = True
+                break
 
-    # Create a folder for the email subject within the month folder
-    email_folder_id, email_folder_link = create_drive_folder(subject, month_folder_id)
+    # If no exact match is found, update the record
+    if not match_found:
+        # Get or create the corresponding month folder in Google Drive
+        month_folder_id = get_or_create_monthly_folder(year_month)
 
-    # Upload the attachment to the Drive folder
-    filename = part.get_filename()
-    file_data = part.get_payload(decode=True)
-    upload_to_drive(file_data, filename, email_folder_id)
+        # Create a folder for the email subject within the month folder
+        email_folder_id, email_folder_link = create_drive_folder(subject, month_folder_id)
 
-    # Convert extracted data to a formatted string
-    details = json.dumps(extracted_data, ensure_ascii=False, indent=4)
+        # Upload the attachment to the Drive folder
+        filename = part.get_filename()
+        file_data = part.get_payload(decode=True)
+        upload_to_drive(file_data, filename, email_folder_id)
 
-    # Update the Google Sheet
-    ws.append_row([email_date, email_time, from_, subject, details, email_folder_link])
+        # Convert extracted data to a formatted string
+        details = json.dumps(extracted_data, ensure_ascii=False, indent=4)
+
+        # Update the Google Sheet
+        ws.append_row([email_date, email_time, from_, subject, details, email_folder_link])
+        print(f"Record updated for email from {from_} with subject {subject}.")
+    else:
+        print(f"Email from {from_} with subject {subject} already exists with the same details.")
+
     
 # Fetch and process each email
 mail = imaplib.IMAP4_SSL("imap.gmail.com")
