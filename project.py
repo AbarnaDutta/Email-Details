@@ -280,7 +280,7 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
                 break
 
     # If no exact match is found, update the record
-    if not match_found:
+    if record_exists:
         # Get or create the corresponding month folder in Google Drive
         month_folder_id = get_or_create_monthly_folder(year_month)
 
