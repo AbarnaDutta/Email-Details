@@ -268,19 +268,37 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
     # Retrieve all records from the worksheet
     records = ws.get_all_records()
 
-    # Convert extracted data to a formatted string
-    new_details = json.dumps(extracted_data, ensure_ascii=False, indent=4)
+    # Normalize the extracted data for comparison
+    normalized_extracted_data = json.dumps(
+        extracted_data, ensure_ascii=False, indent=None, separators=(',', ':')
+    )
+    normalized_extracted_data = json.loads(normalized_extracted_data)
 
-    # Check if a record with the same email date, time, and exact details exists
-    record_exists = False
+    # Check if a record with the same email date, time, and different key fields exists
+    match_found = False
     for record in records:
-        if record['Date'] == email_date and record['Time'] == email_time:
-            if record['Details'] == new_details:
-                record_exists = True
-                break
+        # Extract the details field and load it as a JSON object
+        record_details = json.loads(record['Details'])
+        # Normalize the record details for comparison
+        normalized_record_details = json.dumps(
+            record_details, ensure_ascii=False, indent=None, separators=(',', ':')
+        )
+        normalized_record_details = json.loads(normalized_record_details)
+
+        # Compare each relevant field
+        if (
+            record['Date'] == email_date and
+            record['Time'] == email_time and
+            normalized_record_details.get('invoice_number') == normalized_extracted_data.get('invoice_number') and
+            normalized_record_details.get('invoice_date') == normalized_extracted_data.get('invoice_date') and
+            normalized_record_details.get('invoice_amount') == normalized_extracted_data.get('invoice_amount') and
+            normalized_record_details.get('vendor_name') == normalized_extracted_data.get('vendor_name')
+        ):
+            match_found = True
+            break
 
     # If no exact match is found, update the record
-    if record_exists:
+    if not match_found:
         # Get or create the corresponding month folder in Google Drive
         month_folder_id = get_or_create_monthly_folder(year_month)
 
