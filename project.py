@@ -167,65 +167,61 @@ class DocumentExtractor:
         self.receipt_model_id = receipt_model
 
     def extract_document_data(self, file_path: Path) -> dict:
-        model_id = self.receipt_model_id if "receipt" in file_path.name.lower() else self.invoice_model_id
+    model_id = self.receipt_model_id if "receipt" in file_path.name.lower() else self.invoice_model_id
 
-        with open(file_path, "rb") as f:
-            poller = self.document_analysis_client.begin_analyze_document(
-                model_id, document=f, locale="en-US"
-            )
-        documents = poller.result()
+    document_data = {
+        "invoice_number": None,
+        "invoice_date": None,
+        "invoice_amount": None,
+        "vendor_name": None,
+    }
 
-        document_data = {
-            "invoice_number": None,
-            "invoice_date": None,
-            "invoice_amount": None,
-            "vendor_name": None,
-        }
-
-        with open(file_path, "rb") as f:
-            poller = self.document_analysis_client.begin_analyze_document(
-                self.invoice_model_id, document=f, locale="en-US"
-            )
-        invoice_documents = poller.result()
-        
-        for document in invoice_documents.documents:
-            document_data["invoice_number"] = (
-                document.fields.get("InvoiceId").value if document.fields.get("InvoiceId") else None
-            )
-
-        for document in documents.documents:
-            if model_id == self.invoice_model_id:
-                document_data["invoice_date"] = (
-                    document.fields.get("InvoiceDate").value.strftime("%Y-%m-%d") if document.fields.get("InvoiceDate") and document.fields.get("InvoiceDate").value else None
+    for attempt in range(3):  # Retry up to 3 times
+        try:
+            with open(file_path, "rb") as f:
+                poller = self.document_analysis_client.begin_analyze_document(
+                    model_id, document=f, locale="en-US"
                 )
+            documents = poller.result()
 
-                if document.fields.get("InvoiceTotal"):
-                    invoice_total_text = document.fields.get("InvoiceTotal").content  # Get the raw text
-                    amount = document.fields.get("InvoiceTotal").value.amount
-                    currency_symbol = self.get_currency_symbol(invoice_total_text)
-                    document_data["invoice_amount"] = f"{currency_symbol}{amount}"
+            for document in documents.documents:
+                if model_id == self.invoice_model_id:
+                    document_data["invoice_number"] = (
+                        document.fields.get("InvoiceId").value if document.fields.get("InvoiceId") else None
+                    )
+                    document_data["invoice_date"] = (
+                        document.fields.get("InvoiceDate").value.strftime("%Y-%m-%d") if document.fields.get("InvoiceDate") and document.fields.get("InvoiceDate").value else None
+                    )
+                    if document.fields.get("InvoiceTotal"):
+                        invoice_total_text = document.fields.get("InvoiceTotal").content
+                        amount = document.fields.get("InvoiceTotal").value.amount
+                        currency_symbol = self.get_currency_symbol(invoice_total_text)
+                        document_data["invoice_amount"] = f"{currency_symbol}{amount}"
+                    document_data["vendor_name"] = (
+                        document.fields.get("VendorName").value if document.fields.get("VendorName") else None
+                    )
+                elif model_id == self.receipt_model_id:
+                    document_data["invoice_date"] = (
+                        document.fields.get("TransactionDate").value.strftime("%Y-%m-%d") if document.fields.get("TransactionDate") and document.fields.get("TransactionDate").value else None
+                    )
+                    if document.fields.get("Total"):
+                        total_text = document.fields.get("Total").content
+                        amount = document.fields.get("Total").value
+                        currency_symbol = self.get_currency_symbol(total_text)
+                        document_data["invoice_amount"] = f"{currency_symbol}{amount}"
+                    document_data["vendor_name"] = (
+                        document.fields.get("MerchantName").value if document.fields.get("MerchantName") else None
+                    )
+            return document_data
 
-                document_data["vendor_name"] = (
-                    document.fields.get("VendorName").value if document.fields.get("VendorName") else None
-                )
+        except HttpResponseError as e:
+            if e.status_code == 403:
+                logging.error("Quota exceeded for Azure Form Recognizer. Retrying...")
+                time.sleep(60)  # Wait before retrying
+            else:
+                raise e  # Reraise exception if it's not related to quota
+    raise Exception("Quota exceeded and retry attempts failed.")
 
-            elif model_id == self.receipt_model_id:
-                document_data["invoice_date"] = (
-                    document.fields.get("TransactionDate").value.strftime("%Y-%m-%d") if document.fields.get("TransactionDate") and document.fields.get("TransactionDate").value else None
-                )
-
-                if document.fields.get("Total"):
-                    total_text = document.fields.get("Total").content  # Get the raw text
-                    amount = document.fields.get("Total").value
-                    currency_symbol = self.get_currency_symbol(total_text)
-                    document_data["invoice_amount"] = f"{currency_symbol}{amount}"
-
-                document_data["vendor_name"] = (
-                    document.fields.get("MerchantName").value if document.fields.get("MerchantName") else None
-                )
-
-        return document_data
-        
     def get_currency_symbol(self, text: str) -> str:
         """
         Extract the currency symbol from the text and convert any Unicode escape sequences.
