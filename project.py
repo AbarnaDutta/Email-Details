@@ -192,9 +192,6 @@ class DocumentExtractor:
         self.receipt_model_id = receipt_model
 
     def extract_document_data(self, file_path: Path) -> dict:
-        """
-        Extract data from a document using Azure OCR and return it as a dictionary.
-        """
         model_id = self.receipt_model_id if "receipt" in file_path.name.lower() else self.invoice_model_id
 
         document_data = {
