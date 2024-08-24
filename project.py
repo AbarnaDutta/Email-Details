@@ -318,41 +318,38 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
     )
     normalized_extracted_data = json.loads(normalized_extracted_data)
 
-    print("Normalized Extracted Data:", normalized_extracted_data)
+    # Filter records based on date and time first
+    matching_records = [
+        record for record in records if record['Date'] == email_date and record['Time'] == email_time
+    ]
 
-    # Check if a record with the same email date, time, and different key fields exists
+    # Flag to determine if a match was found
     match_found = False
-    for record in records:
-        # Extract the details field and load it as a JSON object
-        record_details = json.loads(record['Details'])
-        # Normalize the record details for comparison
-        normalized_record_details = json.dumps(
-            record_details, ensure_ascii=False, indent=None, separators=(',', ':')
-        )
-        normalized_record_details = json.loads(normalized_record_details)
 
-        print("Normalized Record Details:", normalized_record_details)
+    if not matching_records:
+        # No records with the same date and time
+        print("No match found based on date and time. Adding a new record.")
+    else:
+        # Records with the same date and time found, now check the details
+        for record in matching_records:
+            record_details = json.loads(record['Details'])
+            normalized_record_details = json.dumps(
+                record_details, ensure_ascii=False, indent=None, separators=(',', ':')
+            )
+            normalized_record_details = json.loads(normalized_record_details)
 
-        # Compare each relevant field
-        if (
-            record['Date'] == email_date and
-            record['Time'] == email_time and
-            normalized_record_details.get('invoice_number') == normalized_extracted_data.get('invoice_number') and
-            normalized_record_details.get('invoice_date') == normalized_extracted_data.get('invoice_date') and
-            normalized_record_details.get('invoice_amount') == normalized_extracted_data.get('invoice_amount') and
-            normalized_record_details.get('vendor_name') == normalized_extracted_data.get('vendor_name')
-        ):
-            print("Match found with the existing record.")
-            match_found = True
-            break
-        else:
-            print("No match found for this record.")
-
-    # Check the value of match_found after the loop
-    print(f"Match found status after loop: {match_found}")
+            if (
+                normalized_record_details.get('invoice_number') == normalized_extracted_data.get('invoice_number') and
+                normalized_record_details.get('invoice_date') == normalized_extracted_data.get('invoice_date') and
+                normalized_record_details.get('invoice_amount') == normalized_extracted_data.get('invoice_amount') and
+                normalized_record_details.get('vendor_name') == normalized_extracted_data.get('vendor_name')
+            ):
+                print("Match found with the existing record.")
+                match_found = True
+                break
 
     # If no exact match is found, update the record
-    if not match_found:
+    if not (matching_records and match_found):
         print("No exact match found, appending new record to the sheet.")
         # Get or create the corresponding month folder in Google Drive
         month_folder_id = get_or_create_monthly_folder(year_month)
