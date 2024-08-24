@@ -1,7 +1,7 @@
 import imaplib
 import email
 from email.header import decode_header
-from datetime import datetime
+from datetime import datetime, timedelta
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import io
@@ -158,6 +158,31 @@ def process_part(part):
 
     return has_attachment, filename, file_data
 
+
+
+class APIRateLimiter:
+    def __init__(self, max_calls_per_minute):
+        self.max_calls_per_minute = max_calls_per_minute
+        self.call_timestamps = []
+
+    def can_make_call(self):
+        now = datetime.now()
+        self.call_timestamps = [ts for ts in self.call_timestamps if ts > now - timedelta(minutes=1)]
+        return len(self.call_timestamps) < self.max_calls_per_minute
+
+    def record_call(self):
+        self.call_timestamps.append(datetime.now())
+
+    def wait_if_needed(self):
+        if not self.can_make_call():
+            earliest_call = min(self.call_timestamps)
+            wait_time = (earliest_call + timedelta(minutes=1) - datetime.now()).total_seconds()
+            if wait_time > 0:
+                time.sleep(wait_time)
+# Rate Limiter Setup
+recognizer_rate_limiter = APIRateLimiter(max_calls_per_minute=20)
+   
+
 class DocumentExtractor:
     def __init__(self, endpoint: str, key: str, invoice_model: str, receipt_model: str):
         self.document_analysis_client = DocumentAnalysisClient(
@@ -167,60 +192,90 @@ class DocumentExtractor:
         self.receipt_model_id = receipt_model
 
     def extract_document_data(self, file_path: Path) -> dict:
-    model_id = self.receipt_model_id if "receipt" in file_path.name.lower() else self.invoice_model_id
+        """
+        Extract data from a document using Azure OCR and return it as a dictionary.
+        """
+        model_id = self.receipt_model_id if "receipt" in file_path.name.lower() else self.invoice_model_id
 
-    document_data = {
-        "invoice_number": None,
-        "invoice_date": None,
-        "invoice_amount": None,
-        "vendor_name": None,
-    }
+        document_data = {
+            "invoice_number": None,
+            "invoice_date": None,
+            "invoice_amount": None,
+            "vendor_name": None,
+        }
 
-    for attempt in range(3):  # Retry up to 3 times
-        try:
-            with open(file_path, "rb") as f:
-                poller = self.document_analysis_client.begin_analyze_document(
-                    model_id, document=f, locale="en-US"
-                )
-            documents = poller.result()
+        for attempt in range(3):  # Retry up to 3 times
+            try:
+                recognizer_rate_limiter.wait_if_needed()
+                
+                with open(file_path, "rb") as f:
+                    poller = self.document_analysis_client.begin_analyze_document(
+                        model_id, document=f, locale="en-US"
+                    )
+                recognizer_rate_limiter.record_call()
+                documents = poller.result()
+                
+                # Always extract invoice number using the invoice model
+                if model_id == self.receipt_model_id:
+                    with open(file_path, "rb") as f:
+                        poller = self.document_analysis_client.begin_analyze_document(
+                            self.invoice_model_id, document=f, locale="en-US"
+                        )
+                    invoice_documents = poller.result()
+                    
+                    for document in invoice_documents.documents:
+                        document_data["invoice_number"] = (
+                            document.fields.get("InvoiceId").value if document.fields.get("InvoiceId") else None
+                        )
 
-            for document in documents.documents:
-                if model_id == self.invoice_model_id:
-                    document_data["invoice_number"] = (
-                        document.fields.get("InvoiceId").value if document.fields.get("InvoiceId") else None
-                    )
-                    document_data["invoice_date"] = (
-                        document.fields.get("InvoiceDate").value.strftime("%Y-%m-%d") if document.fields.get("InvoiceDate") and document.fields.get("InvoiceDate").value else None
-                    )
-                    if document.fields.get("InvoiceTotal"):
-                        invoice_total_text = document.fields.get("InvoiceTotal").content
-                        amount = document.fields.get("InvoiceTotal").value.amount
-                        currency_symbol = self.get_currency_symbol(invoice_total_text)
-                        document_data["invoice_amount"] = f"{currency_symbol}{amount}"
-                    document_data["vendor_name"] = (
-                        document.fields.get("VendorName").value if document.fields.get("VendorName") else None
-                    )
-                elif model_id == self.receipt_model_id:
-                    document_data["invoice_date"] = (
-                        document.fields.get("TransactionDate").value.strftime("%Y-%m-%d") if document.fields.get("TransactionDate") and document.fields.get("TransactionDate").value else None
-                    )
-                    if document.fields.get("Total"):
-                        total_text = document.fields.get("Total").content
-                        amount = document.fields.get("Total").value
-                        currency_symbol = self.get_currency_symbol(total_text)
-                        document_data["invoice_amount"] = f"{currency_symbol}{amount}"
-                    document_data["vendor_name"] = (
-                        document.fields.get("MerchantName").value if document.fields.get("MerchantName") else None
-                    )
-            return document_data
+                # Extract fields specific to the model used
+                for document in documents.documents:
+                    if model_id == self.invoice_model_id:
+                        document_data["invoice_date"] = (
+                            document.fields.get("InvoiceDate").value.strftime("%Y-%m-%d") if document.fields.get("InvoiceDate") and document.fields.get("InvoiceDate").value else None
+                        )
 
-        except HttpResponseError as e:
-            if e.status_code == 403:
-                logging.error("Quota exceeded for Azure Form Recognizer. Retrying...")
-                time.sleep(60)  # Wait before retrying
-            else:
-                raise e  # Reraise exception if it's not related to quota
-    raise Exception("Quota exceeded and retry attempts failed.")
+                        # Extract amount and try to find currency symbol
+                        if document.fields.get("InvoiceTotal"):
+                            invoice_total_text = document.fields.get("InvoiceTotal").content  # Get the raw text
+                            amount = document.fields.get("InvoiceTotal").value.amount
+                            currency_symbol = self.get_currency_symbol(invoice_total_text)
+                            document_data["invoice_amount"] = f"{currency_symbol}{amount}"
+
+                        document_data["vendor_name"] = (
+                            document.fields.get("VendorName").value if document.fields.get("VendorName") else None
+                        )
+
+                    elif model_id == self.receipt_model_id:
+                        document_data["invoice_date"] = (
+                            document.fields.get("TransactionDate").value.strftime("%Y-%m-%d") if document.fields.get("TransactionDate") and document.fields.get("TransactionDate").value else None
+                        )
+
+                        # Extract amount and try to find currency symbol
+                        if document.fields.get("Total"):
+                            total_text = document.fields.get("Total").content  # Get the raw text
+                            amount = document.fields.get("Total").value
+                            currency_symbol = self.get_currency_symbol(total_text)
+                            document_data["invoice_amount"] = f"{currency_symbol}{amount}"
+
+                        document_data["vendor_name"] = (
+                            document.fields.get("MerchantName").value if document.fields.get("MerchantName") else None
+                        )
+
+                logger.info(f"Document Data for file {file_path.name}: {document_data}")
+                return document_data
+
+            except HttpResponseError as e:
+                if e.status_code == 403:
+                    logging.error("Quota exceeded for Azure Form Recognizer. Retrying...")
+                    time.sleep(60)  # Wait before retrying
+                else:
+                    raise e  # Reraise exception if it's not related to quota
+        
+        raise Exception("Quota exceeded and retry attempts failed.")
+
+
+
 
     def get_currency_symbol(self, text: str) -> str:
         """
