@@ -214,16 +214,16 @@ class DocumentExtractor:
                 
                 # Always extract invoice number using the invoice model
                 
-                    with open(file_path, "rb") as f:
-                        poller = self.document_analysis_client.begin_analyze_document(
+                with open(file_path, "rb") as f:
+                    poller = self.document_analysis_client.begin_analyze_document(
                             self.invoice_model_id, document=f, locale="en-US"
-                        )
-                    invoice_documents = poller.result()
+                    )
+                invoice_documents = poller.result()
                     
-                    for document in invoice_documents.documents:
-                        document_data["invoice_number"] = (
-                            document.fields.get("InvoiceId").value if document.fields.get("InvoiceId") else None
-                        )
+                for document in invoice_documents.documents:
+                    document_data["invoice_number"] = (
+                        document.fields.get("InvoiceId").value if document.fields.get("InvoiceId") else None
+                    )
 
                 # Extract fields specific to the model used
                 for document in documents.documents:
