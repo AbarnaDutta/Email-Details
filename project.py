@@ -18,6 +18,8 @@ from pathlib import Path
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 import sys
+from azure.core.exceptions import HttpResponseError
+
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -258,7 +260,7 @@ class DocumentExtractor:
                             document.fields.get("MerchantName").value if document.fields.get("MerchantName") else None
                         )
 
-                logger.info(f"Document Data for file {file_path.name}: {document_data}")
+                
                 return document_data
 
             except HttpResponseError as e:
