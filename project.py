@@ -160,8 +160,6 @@ def process_part(part):
 
     return has_attachment, filename, file_data
 
-
-
 class APIRateLimiter:
     def __init__(self, max_calls_per_minute):
         self.max_calls_per_minute = max_calls_per_minute
@@ -181,6 +179,7 @@ class APIRateLimiter:
             wait_time = (earliest_call + timedelta(minutes=1) - datetime.now()).total_seconds()
             if wait_time > 0:
                 time.sleep(wait_time)
+                
 # Rate Limiter Setup
 recognizer_rate_limiter = APIRateLimiter(max_calls_per_minute=20)
    
@@ -214,7 +213,7 @@ class DocumentExtractor:
                 documents = poller.result()
                 
                 # Always extract invoice number using the invoice model
-                if model_id == self.receipt_model_id:
+                
                     with open(file_path, "rb") as f:
                         poller = self.document_analysis_client.begin_analyze_document(
                             self.invoice_model_id, document=f, locale="en-US"
