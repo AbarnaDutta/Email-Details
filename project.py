@@ -211,9 +211,8 @@ class DocumentExtractor:
                     )
                 recognizer_rate_limiter.record_call()
                 documents = poller.result()
-                
+
                 # Always extract invoice number using the invoice model
-                
                 with open(file_path, "rb") as f:
                     poller = self.document_analysis_client.begin_analyze_document(
                             self.invoice_model_id, document=f, locale="en-US"
@@ -270,6 +269,7 @@ class DocumentExtractor:
                     raise e  # Reraise exception if it's not related to quota
         
         raise Exception("Quota exceeded and retry attempts failed.")
+
 
     def get_currency_symbol(self, text: str) -> str:
         """
