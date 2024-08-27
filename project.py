@@ -377,7 +377,7 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
 mail = imaplib.IMAP4_SSL("imap.gmail.com")
 mail.login(username, password)
 mail.select("inbox")
-status, messages = mail.search(None, "ALL")
+status, messages = mail.search(None, "UNSEEN")
 email_ids = messages[0].split()
 
 for email_id in email_ids:
@@ -412,6 +412,8 @@ for email_id in email_ids:
                     temp_path.unlink()
 
                     process_email_attachment(email_date, email_time, from_, subject, msg, extracted_data)
+    # Mark the email as seen
+    mail.store(email_id, '+FLAGS', '\\Seen')
 
 # Close the connection and logout
 mail.close()
