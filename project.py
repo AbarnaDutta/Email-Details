@@ -51,7 +51,7 @@ def get_or_create_worksheet(sheet_name):
         return worksheet_cache[sheet_name]
     else:
         ws = spreadsheet.add_worksheet(title=sheet_name, rows="100", cols="20")
-        ws.append_row(["Date", "Time", "From", "Subject", "Details", "Attachment"])
+        ws.append_row(["Date", "Time", "From", "Subject", "Invoice Number","Invoice Date","Invoice Amount", "Vendor Name", "Attachment"])
         worksheet_cache[sheet_name] = ws
         return ws
 
@@ -298,7 +298,17 @@ document_extractor = DocumentExtractor(
 
 
 def process_email_attachment(email_date, email_time, from_, subject, part, extracted_data):
-    invoice_date = extracted_data.get("invoice_date")
+    # Normalize the extracted data for comparison
+    normalized_extracted_data = json.dumps(
+        extracted_data, ensure_ascii=False, indent=None, separators=(',', ':')
+    )
+    normalized_extracted_data = json.loads(normalized_extracted_data)
+
+    invoice_number = normalized_extracted_data.get('invoice_number') 
+    invoice_date =  normalized_extracted_data.get('invoice_date')
+    invoice_amount = normalized_extracted_data.get('invoice_amount')
+    vendor_name = normalized_extracted_data.get('vendor_name')
+    
     if not invoice_date:
         print("No invoice date found in the attachment.")
         return
@@ -312,44 +322,23 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
     # Retrieve all records from the worksheet
     records = ws.get_all_records()
 
-    # Normalize the extracted data for comparison
-    normalized_extracted_data = json.dumps(
-        extracted_data, ensure_ascii=False, indent=None, separators=(',', ':')
-    )
-    normalized_extracted_data = json.loads(normalized_extracted_data)
-
-    # Filter records based on date and time first
-    matching_records = [
-        record for record in records if record['Date'] == email_date and record['Time'] == email_time
-    ]
-
     # Flag to determine if a match was found
     match_found = False
 
-    if not matching_records:
-        # No records with the same date and time
-        print("No match found based on date and time. Adding a new record.")
-    else:
-        # Records with the same date and time found, now check the details
-        for record in matching_records:
-            record_details = json.loads(record['Details'])
-            normalized_record_details = json.dumps(
-                record_details, ensure_ascii=False, indent=None, separators=(',', ':')
-            )
-            normalized_record_details = json.loads(normalized_record_details)
-
-            if (
-                normalized_record_details.get('invoice_number') == normalized_extracted_data.get('invoice_number') and
-                normalized_record_details.get('invoice_date') == normalized_extracted_data.get('invoice_date') and
-                normalized_record_details.get('invoice_amount') == normalized_extracted_data.get('invoice_amount') and
-                normalized_record_details.get('vendor_name') == normalized_extracted_data.get('vendor_name')
-            ):
-                print("Match found with the existing record.")
-                match_found = True
-                break
+    # Iterate through existing records to find a match
+    for record in records:
+        if (
+            record['Invoice Number'] == invoice_number and
+            record['Invoice Date'] == invoice_date and
+            record['Invoice Amount'] == invoice_amount and
+            record['Vendor Name'] == vendor_name
+        ):
+            print("Match found with the existing record.")
+            match_found = True
+            break
 
     # If no exact match is found, update the record
-    if not (matching_records and match_found):
+    if not match_found:
         print("No exact match found, appending new record to the sheet.")
         # Get or create the corresponding month folder in Google Drive
         month_folder_id = get_or_create_monthly_folder(year_month)
@@ -366,10 +355,11 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
         details = json.dumps(extracted_data, ensure_ascii=False, indent=4)
 
         # Update the Google Sheet
-        ws.append_row([email_date, email_time, from_, subject, details, email_folder_link])
+        ws.append_row([email_date, email_time, from_, subject, invoice_number, invoice_date, invoice_amount, vendor_name, email_folder_link])
         print(f"Record updated for email from {from_} with subject {subject}.")
     else:
         print(f"Email from {from_} with subject {subject} already exists with the same details.")
+
 
 
     
