@@ -240,7 +240,7 @@ class DocumentExtractor:
                 invoice_documents = poller.result()
                     
                 for document in invoice_documents.documents:
-                    document_data["invoice_number"] = (
+                    extracted_data["invoice_number"] = (
                         document.fields.get("InvoiceId").value if document.fields.get("InvoiceId") else None
                     )
 
