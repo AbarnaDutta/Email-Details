@@ -348,6 +348,11 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
 
     # Iterate through existing records to find a match
     for record in records:
+        print(f"Comparing Invoice Number: {record['Invoice Number']} vs {invoice_number}")
+        print(f"Comparing Invoice Date: {record['Invoice Date']} vs {invoice_date}")
+        print(f"Comparing Invoice Amount: {record['Invoice Amount']} vs {invoice_amount}")
+        print(f"Comparing Vendor Name: {record['Vendor Name']} vs {vendor_name}")
+
         if (
             record['Invoice Number'] == invoice_number and
             record['Invoice Date'] == invoice_date and
