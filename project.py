@@ -351,11 +351,12 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
     for record in records:
         # Convert each field from the Google Sheet's record to string
         normalized_record = {
-            'Invoice Number': str(record['Invoice Number']).strip(),
-            'Invoice Date': str(record['Invoice Date']).strip(),
-            'Invoice Amount': str(record['Invoice Amount']).strip(),
-            'Vendor Name': str(record['Vendor Name']).strip().replace('\n', ' ')
+            'Invoice Number': str(record.get('Invoice Number', '')).strip(),
+            'Invoice Date': str(record.get('Invoice Date', '')).strip(),
+            'Invoice Amount': standardize_amount(str(record.get('Invoice Amount', '')).strip()),
+            'Vendor Name': str(record.get('Vendor Name', '')).strip().replace('\n', ' ')
         }
+
 
         # Print comparisons with string values
         print(f"Comparing Invoice Number: {normalized_record['Invoice Number']} vs {invoice_number}")
