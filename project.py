@@ -188,9 +188,30 @@ class DocumentExtractor:
         self.receipt_model_id = receipt_model
 
     def extract_document_data(self, file_path: Path) -> dict:
-        model_id = self.receipt_model_id if "receipt" in file_path.name.lower() else self.invoice_model_id
-
         document_data = {
+            "invoice_number": None,
+            "invoice_date": None,
+            "invoice_amount": None,
+            "vendor_name": None,
+        }
+
+        # Try extracting with the invoice model first
+        invoice_data = self.extract_data_with_model(file_path, self.invoice_model_id)
+        
+        # If any field is missing, attempt to extract from the receipt model
+        receipt_data = self.extract_data_with_model(file_path, self.receipt_model_id)
+
+        # Use receipt data to fill in missing fields from the invoice data
+        for field in document_data.keys():
+            if not invoice_data.get(field):
+                document_data[field] = receipt_data.get(field)
+            else:
+                document_data[field] = invoice_data[field]
+
+        return document_data
+
+    def extract_data_with_model(self, file_path: Path, model_id: str) -> dict:
+        extracted_data = {
             "invoice_number": None,
             "invoice_date": None,
             "invoice_amount": None,
