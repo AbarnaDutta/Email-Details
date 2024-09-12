@@ -348,21 +348,29 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
 
     # Iterate through existing records to find a match
     for record in records:
-        print(f"Comparing Invoice Number: {record['Invoice Number']} vs {invoice_number}")
-        print(f"Comparing Invoice Date: {record['Invoice Date']} vs {invoice_date}")
-        print(f"Comparing Invoice Amount: {repr(record['Invoice Amount'])} vs {repr(invoice_amount)}")
-        print(f"Comparing Vendor Name: {record['Vendor Name']} vs {vendor_name}")
+        # Normalize each field from the Google Sheet's record
+        normalized_record = {
+            'Invoice Number': json.dumps(record['Invoice Number'], ensure_ascii=False, separators=(',', ':')),
+            'Invoice Date': json.dumps(record['Invoice Date'], ensure_ascii=False, separators=(',', ':')),
+            'Invoice Amount': json.dumps(record['Invoice Amount'], ensure_ascii=False, separators=(',', ':')),
+            'Vendor Name': json.dumps(record['Vendor Name'], ensure_ascii=False, separators=(',', ':'))
+        }
+
+        # Compare each field individually, but normalized
+        print(f"Comparing Invoice Number: {normalized_record['Invoice Number']} vs {json.dumps(invoice_number, ensure_ascii=False, separators=(',', ':'))}")
+        print(f"Comparing Invoice Date: {normalized_record['Invoice Date']} vs {json.dumps(invoice_date, ensure_ascii=False, separators=(',', ':'))}")
+        print(f"Comparing Invoice Amount: {normalized_record['Invoice Amount']} vs {json.dumps(invoice_amount, ensure_ascii=False, separators=(',', ':'))}")
+        print(f"Comparing Vendor Name: {normalized_record['Vendor Name']} vs {json.dumps(vendor_name, ensure_ascii=False, separators=(',', ':'))}")
 
         if (
-            record['Invoice Number'] == invoice_number and
-            record['Invoice Date'] == invoice_date and
-            record['Invoice Amount'] == invoice_amount and
-            record['Vendor Name'] == vendor_name
+            normalized_record['Invoice Number'] == invoice_number and
+            normalized_record['Invoice Date'] == invoice_date and
+            normalized_record['Invoice Amount'] == invoice_amount and
+            normalized_record['Vendor Name'] == vendor_name
         ):
             print("Match found with the existing record.")
             match_found = True
             break
-
     # If no exact match is found, update the record
     if not match_found:
         print("No exact match found, appending new record to the sheet.")
@@ -377,8 +385,6 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
         file_data = part.get_payload(decode=True)
         upload_to_drive(file_data, filename, email_folder_id)
 
-        # Convert extracted data to a formatted string
-        details = json.dumps(extracted_data, ensure_ascii=False, indent=4)
 
         # Update the Google Sheet
         ws.append_row([email_date, email_time, from_, subject, invoice_number, invoice_date, invoice_amount, vendor_name, email_folder_link])
