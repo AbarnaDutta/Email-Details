@@ -247,36 +247,36 @@ class DocumentExtractor:
                 # Extract fields specific to the model used
                 for document in documents.documents:
                     if model_id == self.invoice_model_id:
-                        document_data["invoice_date"] = (
+                        extracted_data["invoice_number"] = (
+                            document.fields.get("InvoiceId").value if document.fields.get("InvoiceId") else None
+                        )
+                        extracted_data["invoice_date"] = (
                             document.fields.get("InvoiceDate").value.strftime("%Y-%m-%d") if document.fields.get("InvoiceDate") and document.fields.get("InvoiceDate").value else None
                         )
-
                         if document.fields.get("InvoiceTotal"):
                             invoice_total_text = document.fields.get("InvoiceTotal").content
                             amount = document.fields.get("InvoiceTotal").value.amount
                             currency_symbol = self.get_currency_symbol(invoice_total_text)
-                            document_data["invoice_amount"] = f"{currency_symbol}{amount}"
-
-                        document_data["vendor_name"] = (
+                            extracted_data["invoice_amount"] = f"{currency_symbol}{amount}"
+    
+                        extracted_data["vendor_name"] = (
                             document.fields.get("VendorName").value if document.fields.get("VendorName") else None
                         )
-
+    
                     elif model_id == self.receipt_model_id:
-                        document_data["invoice_date"] = (
+                        extracted_data["invoice_date"] = (
                             document.fields.get("TransactionDate").value.strftime("%Y-%m-%d") if document.fields.get("TransactionDate") and document.fields.get("TransactionDate").value else None
                         )
-
                         if document.fields.get("Total"):
                             total_text = document.fields.get("Total").content
                             amount = document.fields.get("Total").value
                             currency_symbol = self.get_currency_symbol(total_text)
-                            document_data["invoice_amount"] = f"{currency_symbol}{amount}"
-
-                        document_data["vendor_name"] = (
+                            extracted_data["invoice_amount"] = f"{currency_symbol}{amount}"
+    
+                        extracted_data["vendor_name"] = (
                             document.fields.get("MerchantName").value if document.fields.get("MerchantName") else None
                         )
-
-                return document_data
+                return extracted_data
 
             except HttpResponseError as e:
                 if e.status_code == 403:
