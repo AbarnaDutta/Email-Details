@@ -325,10 +325,11 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
     )
     normalized_extracted_data = json.loads(normalized_extracted_data)
 
-    invoice_number = normalized_extracted_data.get('invoice_number') 
-    invoice_date =  normalized_extracted_data.get('invoice_date')
-    invoice_amount = normalized_extracted_data.get('invoice_amount')
-    vendor_name = normalized_extracted_data.get('vendor_name')
+    # Convert extracted data fields to strings
+    invoice_number = str(normalized_extracted_data.get('invoice_number', ''))
+    invoice_date = str(normalized_extracted_data.get('invoice_date', ''))
+    invoice_amount = str(normalized_extracted_data.get('invoice_amount', ''))
+    vendor_name = str(normalized_extracted_data.get('vendor_name', ''))
     
     if not invoice_date:
         print("No invoice date found in the attachment.")
@@ -348,19 +349,19 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
 
     # Iterate through existing records to find a match
     for record in records:
-        # Normalize each field from the Google Sheet's record
+        # Convert each field from the Google Sheet's record to string
         normalized_record = {
-            'Invoice Number': json.dumps(record['Invoice Number'], ensure_ascii=False, separators=(',', ':')),
-            'Invoice Date': json.dumps(record['Invoice Date'], ensure_ascii=False, separators=(',', ':')),
-            'Invoice Amount': json.dumps(record['Invoice Amount'], ensure_ascii=False, separators=(',', ':')),
-            'Vendor Name': json.dumps(record['Vendor Name'], ensure_ascii=False, separators=(',', ':'))
+            'Invoice Number': str(record['Invoice Number']),
+            'Invoice Date': str(record['Invoice Date']),
+            'Invoice Amount': str(record['Invoice Amount']),
+            'Vendor Name': str(record['Vendor Name'])
         }
 
-        # Compare each field individually, but normalized
-        print(f"Comparing Invoice Number: {normalized_record['Invoice Number']} vs {json.dumps(invoice_number, ensure_ascii=False, separators=(',', ':'))}")
-        print(f"Comparing Invoice Date: {normalized_record['Invoice Date']} vs {json.dumps(invoice_date, ensure_ascii=False, separators=(',', ':'))}")
-        print(f"Comparing Invoice Amount: {normalized_record['Invoice Amount']} vs {json.dumps(invoice_amount, ensure_ascii=False, separators=(',', ':'))}")
-        print(f"Comparing Vendor Name: {normalized_record['Vendor Name']} vs {json.dumps(vendor_name, ensure_ascii=False, separators=(',', ':'))}")
+        # Print comparisons with string values
+        print(f"Comparing Invoice Number: {normalized_record['Invoice Number']} vs {invoice_number}")
+        print(f"Comparing Invoice Date: {normalized_record['Invoice Date']} vs {invoice_date}")
+        print(f"Comparing Invoice Amount: {normalized_record['Invoice Amount']} vs {invoice_amount}")
+        print(f"Comparing Vendor Name: {normalized_record['Vendor Name']} vs {vendor_name}")
 
         if (
             normalized_record['Invoice Number'] == invoice_number and
