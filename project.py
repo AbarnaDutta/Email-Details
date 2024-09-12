@@ -356,6 +356,7 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
         if (
             record['Invoice Number'] == invoice_number and
             record['Invoice Date'] == invoice_date and
+            record['Invoice Amount'] == invoice_amount and
             record['Vendor Name'] == vendor_name
         ):
             print("Match found with the existing record.")
