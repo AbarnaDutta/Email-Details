@@ -350,7 +350,7 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
     for record in records:
         print(f"Comparing Invoice Number: {record['Invoice Number']} vs {invoice_number}")
         print(f"Comparing Invoice Date: {record['Invoice Date']} vs {invoice_date}")
-        print(f"Comparing Invoice Amount: {record['Invoice Amount']} vs {invoice_amount}")
+        print(f"Comparing Invoice Amount: {repr(record['Invoice Amount'])} vs {repr(invoice_amount)}")
         print(f"Comparing Vendor Name: {record['Vendor Name']} vs {vendor_name}")
 
         if (
