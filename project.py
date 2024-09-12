@@ -353,8 +353,8 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
         normalized_record = {
             'Invoice Number': str(record.get('Invoice Number', '')).strip(),
             'Invoice Date': str(record.get('Invoice Date', '')).strip(),
-            'Invoice Amount': standardize_amount(str(record.get('Invoice Amount', '')).strip()),
-            'Vendor Name': str(record.get('Vendor Name', '')).strip().replace('\n', ' ')
+            'Invoice Amount': str(record.get('Invoice Amount', '')).strip(),
+            'Vendor Name': str(record.get('Vendor Name', '')).strip()
         }
 
 
