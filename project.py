@@ -317,6 +317,7 @@ document_extractor = DocumentExtractor(
     receipt_model="prebuilt-receipt"
 )
 
+
 def update_total_invoice_amount(ws):
     records = ws.get_all_records()
 
@@ -324,7 +325,8 @@ def update_total_invoice_amount(ws):
     currency_totals = {}
 
     for record in records[1:]:
-        invoice_amount = record["Invoice Amount"]
+        # Ensure invoice_amount is treated as a string
+        invoice_amount = str(record["Invoice Amount"])
 
         # Detect currency symbol and extract the amount
         match = re.match(r'([€£$₹]?)([\d,\.]+)', invoice_amount.strip())
@@ -360,6 +362,7 @@ def update_total_invoice_amount(ws):
     ws.update(f"G{last_row+1}", total_amount_text)
 
     print(f"Total invoice amount updated: {total_amount_text}")
+
 
 
 def process_email_attachment(email_date, email_time, from_, subject, part, extracted_data):
