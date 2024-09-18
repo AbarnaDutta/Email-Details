@@ -325,33 +325,23 @@ def update_total_invoice_amount(ws):
     currency_totals = {}
 
     for record in records[1:]:
-        invoice_amount = record.get("Invoice Amount")
+        invoice_amount = str(record["Invoice Amount"])
 
-        # Ensure `invoice_amount` is a string, converting if necessary
-        if isinstance(invoice_amount, (int, float)):
-            invoice_amount = f"{invoice_amount:.2f}"  # Convert numbers to string format
-        elif invoice_amount is None:
-            continue  # Skip if the value is None
-        else:
-            invoice_amount = str(invoice_amount)  # Ensure it's a string for consistency
-
-        # At this point, `invoice_amount` should always be a string
         # Detect currency symbol and extract the amount
         match = re.match(r'([€£$₹]?)([\d,\.]+)', invoice_amount.strip())
         if match:
-            currency_symbol = match.group(1)  # Capture the currency symbol (₹, $, etc.)
-            amount_str = match.group(2).replace(",", "")  # Capture the amount (remove commas)
+            currency_symbol = match.group(1)
+            amount_str = match.group(2).replace(",", "")
 
             try:
                 amount = float(amount_str)
 
-                # Add the amount to the corresponding currency total
                 if currency_symbol in currency_totals:
                     currency_totals[currency_symbol] += amount
                 else:
                     currency_totals[currency_symbol] = amount
             except ValueError:
-                continue  # If the amount can't be converted to float, skip the record
+                continue  # Skip invalid amounts
 
     # Delete any existing "Total Amount" row
     all_values = ws.get_all_values()
@@ -361,16 +351,19 @@ def update_total_invoice_amount(ws):
     # Prepare the total amount text
     total_amount_text = " + ".join([f"{symbol}{total:.2f}" for symbol, total in currency_totals.items()])
 
-    # Merge the first six columns (A:F) and write the "Total Amount" text
+    # Append new "Total Amount" row
     last_row = len(all_values)
-    ws.append_row(["Total Amount", "", "", "", "", ""])
-    ws.merge_cells(last_row+1, 1, last_row+1, 6)
+    ws.append_row(["Total Amount", "", "", "", "", "", "", "", ""])  # Add empty columns
 
-    # Add the total in the appropriate columns
-    ws.update(f"G{last_row+1}", [[total_amount_text]])  # Wrap the text in a list
+    # Merge the first six columns (A:F) and G:I
+    ws.merge_cells(last_row + 1, 1, last_row + 1, 6)  # Merge A:F for "Total Amount"
+    ws.merge_cells(last_row + 1, 7, last_row + 1, 9)  # Merge G:I for total value
 
+    # Update the total amount in the merged G:I columns (only update G)
+    ws.update(f"G{last_row + 1}", total_amount_text)
 
     print(f"Total invoice amount updated: {total_amount_text}")
+
 
 
 
