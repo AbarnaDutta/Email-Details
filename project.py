@@ -367,7 +367,8 @@ def update_total_invoice_amount(ws):
     ws.merge_cells(last_row+1, 1, last_row+1, 6)
 
     # Add the total in the appropriate columns
-    ws.update(f"G{last_row+1}", total_amount_text)
+    ws.update(f"G{last_row+1}", [[total_amount_text]])  # Wrap the text in a list
+
 
     print(f"Total invoice amount updated: {total_amount_text}")
 
