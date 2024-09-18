@@ -317,6 +317,50 @@ document_extractor = DocumentExtractor(
     receipt_model="prebuilt-receipt"
 )
 
+def update_total_invoice_amount(ws):
+    records = ws.get_all_records()
+
+    # Initialize a dictionary to hold totals for different currencies
+    currency_totals = {}
+
+    for record in records[1:]:
+        invoice_amount = record["Invoice Amount"]
+
+        # Detect currency symbol and extract the amount
+        match = re.match(r'([€£$₹]?)([\d,\.]+)', invoice_amount.strip())
+        if match:
+            currency_symbol = match.group(1)  # Capture the currency symbol (₹, $, etc.)
+            amount_str = match.group(2).replace(",", "")  # Capture the amount (remove commas)
+
+            try:
+                amount = float(amount_str)
+
+                # Add the amount to the corresponding currency total
+                if currency_symbol in currency_totals:
+                    currency_totals[currency_symbol] += amount
+                else:
+                    currency_totals[currency_symbol] = amount
+            except ValueError:
+                continue  # If the amount can't be converted to float, skip the record
+
+    # Delete any existing "Total Amount" row
+    all_values = ws.get_all_values()
+    if all_values[-1][0] == "Total Amount":
+        ws.delete_row(len(all_values))
+
+    # Prepare the total amount text
+    total_amount_text = " + ".join([f"{symbol}{total:.2f}" for symbol, total in currency_totals.items()])
+
+    # Merge the first six columns (A:F) and write the "Total Amount" text
+    last_row = len(all_values)
+    ws.append_row(["Total Amount", "", "", "", "", ""])
+    ws.merge_cells(last_row+1, 1, last_row+1, 6)
+
+    # Add the total in the appropriate columns
+    ws.update(f"G{last_row+1}", total_amount_text)
+
+    print(f"Total invoice amount updated: {total_amount_text}")
+
 
 def process_email_attachment(email_date, email_time, from_, subject, part, extracted_data):
     # Normalize the extracted data for comparison
@@ -390,6 +434,9 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
 
         # Update the Google Sheet
         ws.append_row([email_date, email_time, from_, subject, invoice_number, invoice_date, invoice_amount, vendor_name, email_folder_link])
+        # Update the total invoice amount at the bottom of the sheet
+        update_total_invoice_amount(ws)
+        
         print(f"Record updated for email from {from_} with subject {subject}.")
     else:
         print(f"Email from {from_} with subject {subject} already exists with the same details.")
