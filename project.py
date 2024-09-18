@@ -325,8 +325,14 @@ def update_total_invoice_amount(ws):
     currency_totals = {}
 
     for record in records[1:]:
+        invoice_amount = record["Invoice Amount"]
+
         # Ensure invoice_amount is treated as a string
-        invoice_amount = str(record["Invoice Amount"])
+        if isinstance(invoice_amount, float):
+            # Convert float to string
+            invoice_amount = f"{invoice_amount:.2f}"
+        else:
+            invoice_amount = str(invoice_amount)
 
         # Detect currency symbol and extract the amount
         match = re.match(r'([€£$₹]?)([\d,\.]+)', invoice_amount.strip())
@@ -362,6 +368,7 @@ def update_total_invoice_amount(ws):
     ws.update(f"G{last_row+1}", total_amount_text)
 
     print(f"Total invoice amount updated: {total_amount_text}")
+
 
 
 
