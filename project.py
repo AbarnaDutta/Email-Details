@@ -360,7 +360,8 @@ def update_total_invoice_amount(ws):
     ws.merge_cells(last_row + 1, 7, last_row + 1, 9)  # Merge G:I for total value
 
     # Update the total amount in the merged G:I columns (only update G)
-    ws.update(f"G{last_row + 1}", total_amount_text)
+    ws.update(f"G{last_row + 1}", [[total_amount_text]])
+
 
     print(f"Total invoice amount updated: {total_amount_text}")
 
