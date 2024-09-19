@@ -369,7 +369,7 @@ def update_total_invoice_amount(ws):
     
     # Add no currency total if it exists
     if no_currency_total > 0:
-        currency_totals_text += f" + ${no_currency_total:.2f}"
+        currency_totals_text += f" + {no_currency_total:.2f}"
 
     # Append new "Total Amount" row with placeholders for G, H, I
     ws.append_row(["Total Amount", "", "", "", "", "", currency_totals_text, "", ""])
@@ -382,6 +382,7 @@ def update_total_invoice_amount(ws):
     ws.merge_cells(new_last_row, 7, new_last_row, 9)  # Merge G:I
 
     print(f"Total invoice amount updated: {currency_totals_text}")
+
 
 
 
