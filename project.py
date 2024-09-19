@@ -332,21 +332,21 @@ def update_total_invoice_amount(ws):
         # Detect currency symbol and extract the amount
         match = re.match(r'([€£$₹]?)([\d,\.]+)', invoice_amount)
         if match:
-            currency_symbol = match.group(1) if match.group(1) else None
+            currency_symbol = match.group(1) if match.group(1) else ''  # Default to '' if no symbol
             amount_str = match.group(2).replace(",", "")
 
             try:
                 amount = float(amount_str)
 
-                # Accumulate totals for each currency symbol
-                if currency_symbol:
+                if currency_symbol == '':
+                    # If no currency symbol, treat as default currency
+                    default_currency_total += amount
+                else:
+                    # Accumulate totals for each currency symbol
                     if currency_symbol in currency_totals:
                         currency_totals[currency_symbol] += amount
                     else:
                         currency_totals[currency_symbol] = amount
-                else:
-                    # Handle amounts with no currency symbol separately
-                    default_currency_total += amount
             except ValueError:
                 print(f"Skipping invalid amount: {amount_str}")
                 continue  # Skip invalid amounts
@@ -367,8 +367,9 @@ def update_total_invoice_amount(ws):
     # Prepare the total amount text for all currencies
     total_amount_text = " + ".join([f"{symbol}{total:.2f}" for symbol, total in currency_totals.items()])
     
+    # Ensure default currency total is included
     if default_currency_total > 0:
-        total_amount_text += f" + ${default_currency_total:.2f}"  # Append default currency total
+        total_amount_text += f" + ${default_currency_total:.2f}"
 
     # Append new "Total Amount" row with placeholders for G, H, I
     ws.append_row(["Total Amount", "", "", "", "", "", total_amount_text, "", ""])
