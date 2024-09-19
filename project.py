@@ -323,7 +323,7 @@ def update_total_invoice_amount(ws):
 
     # Initialize a dictionary to hold totals for different currencies
     currency_totals = {}
-    default_currency_total = 0.0
+    no_currency_total = 0.0
 
     # Start from row 2 (skip header)
     for record in records[1:]:
@@ -339,8 +339,8 @@ def update_total_invoice_amount(ws):
                 amount = float(amount_str)
 
                 if currency_symbol == '':
-                    # If no currency symbol, treat as default currency
-                    default_currency_total += amount
+                    # If no currency symbol, treat as separate 'No Currency' amount
+                    no_currency_total += amount
                 else:
                     # Accumulate totals for each currency symbol
                     if currency_symbol in currency_totals:
@@ -353,7 +353,7 @@ def update_total_invoice_amount(ws):
 
     # Debug: Print accumulated totals for verification
     print("Accumulated currency totals:", currency_totals)
-    print("Default currency total:", default_currency_total)
+    print("No currency total:", no_currency_total)
 
     # Get all values to search for "Total Amount" row
     all_values = ws.get_all_values()
@@ -365,14 +365,14 @@ def update_total_invoice_amount(ws):
             ws.delete_rows(i + 1)  # Row numbers are 1-indexed
 
     # Prepare the total amount text for all currencies
-    total_amount_text = " + ".join([f"{symbol}{total:.2f}" for symbol, total in currency_totals.items()])
+    currency_totals_text = " + ".join([f"{symbol}{total:.2f}" for symbol, total in currency_totals.items()])
     
-    # Ensure default currency total is included
-    if default_currency_total > 0:
-        total_amount_text += f" + ${default_currency_total:.2f}"
+    # Add no currency total if it exists
+    if no_currency_total > 0:
+        currency_totals_text += f" + ${no_currency_total:.2f}"
 
     # Append new "Total Amount" row with placeholders for G, H, I
-    ws.append_row(["Total Amount", "", "", "", "", "", total_amount_text, "", ""])
+    ws.append_row(["Total Amount", "", "", "", "", "", currency_totals_text, "", ""])
 
     # Get the new last row number
     new_last_row = len(ws.get_all_values())  # Update after appending
@@ -381,7 +381,7 @@ def update_total_invoice_amount(ws):
     ws.merge_cells(new_last_row, 1, new_last_row, 6)  # Merge A:F
     ws.merge_cells(new_last_row, 7, new_last_row, 9)  # Merge G:I
 
-    print(f"Total invoice amount updated: {total_amount_text}")
+    print(f"Total invoice amount updated: {currency_totals_text}")
 
 
 
