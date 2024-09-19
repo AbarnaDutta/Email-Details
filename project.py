@@ -324,6 +324,7 @@ def update_total_invoice_amount(ws):
     # Initialize a dictionary to hold totals for different currencies
     currency_totals = {}
 
+    # Start from row 2 (skip header)
     for record in records[1:]:
         invoice_amount = str(record["Invoice Amount"])
 
@@ -343,24 +344,30 @@ def update_total_invoice_amount(ws):
             except ValueError:
                 continue  # Skip invalid amounts
 
-    # Delete any existing "Total Amount" row
+    # Get all values to search for "Total Amount" row
     all_values = ws.get_all_values()
-    if all_values[-1][0] == "Total Amount":
-        ws.delete_row(len(all_values))
+    last_row = len(all_values)
+    
+    # Check and delete any existing "Total Amount" row
+    for i in range(len(all_values)):
+        if all_values[i][0] == "Total Amount":
+            ws.delete_row(i + 1)  # Row numbers are 1-indexed
 
     # Prepare the total amount text
     total_amount_text = " + ".join([f"{symbol}{total:.2f}" for symbol, total in currency_totals.items()])
 
-    # Append new "Total Amount" row
-    last_row = len(all_values)
+    # Append new "Total Amount" row with placeholders for G, H, I
     ws.append_row(["Total Amount", "", "", "", "", "", total_amount_text, "", ""])
 
-    # Merge the first six columns (A:F) and the last three columns (G:I)
-    ws.merge_cells(last_row+1, 1, last_row+1, 6)  # Merge A:F
-    ws.merge_cells(last_row+1, 7, last_row+1, 9)  # Merge G:I
+    # Get the new last row number
+    new_last_row = len(ws.get_all_values())  # Update after appending
 
+    # Merge the first six columns (A:F) and the last three columns (G:I)
+    ws.merge_cells(new_last_row, 1, new_last_row, 6)  # Merge A:F
+    ws.merge_cells(new_last_row, 7, new_last_row, 9)  # Merge G:I
 
     print(f"Total invoice amount updated: {total_amount_text}")
+
 
 
 
