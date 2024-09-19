@@ -323,31 +323,42 @@ def update_total_invoice_amount(ws):
 
     # Initialize a dictionary to hold totals for different currencies
     currency_totals = {}
+    default_currency_total = 0.0
 
     # Start from row 2 (skip header)
     for record in records[1:]:
         invoice_amount = str(record["Invoice Amount"])
 
         # Detect currency symbol and extract the amount
-        match = re.match(r'([€£$₹]?)([\d,\.]+)', invoice_amount.strip())
+        match = re.match(r'([€£$₹]?)([\d,\.]+)', invoice_amount)
         if match:
-            currency_symbol = match.group(1)
+            currency_symbol = match.group(1) if match.group(1) else None
             amount_str = match.group(2).replace(",", "")
 
             try:
                 amount = float(amount_str)
 
-                if currency_symbol in currency_totals:
-                    currency_totals[currency_symbol] += amount
+                # Accumulate totals for each currency symbol
+                if currency_symbol:
+                    if currency_symbol in currency_totals:
+                        currency_totals[currency_symbol] += amount
+                    else:
+                        currency_totals[currency_symbol] = amount
                 else:
-                    currency_totals[currency_symbol] = amount
+                    # Handle amounts with no currency symbol separately
+                    default_currency_total += amount
             except ValueError:
+                print(f"Skipping invalid amount: {amount_str}")
                 continue  # Skip invalid amounts
+
+    # Debug: Print accumulated totals for verification
+    print("Accumulated currency totals:", currency_totals)
+    print("Default currency total:", default_currency_total)
 
     # Get all values to search for "Total Amount" row
     all_values = ws.get_all_values()
     last_row = len(all_values)
-    
+
     # Check and delete any existing "Total Amount" row
     for i in range(len(all_values)):
         if all_values[i][0] == "Total Amount":
@@ -355,6 +366,9 @@ def update_total_invoice_amount(ws):
 
     # Prepare the total amount text for all currencies
     total_amount_text = " + ".join([f"{symbol}{total:.2f}" for symbol, total in currency_totals.items()])
+    
+    if default_currency_total > 0:
+        total_amount_text += f" + ${default_currency_total:.2f}"  # Append default currency total
 
     # Append new "Total Amount" row with placeholders for G, H, I
     ws.append_row(["Total Amount", "", "", "", "", "", total_amount_text, "", ""])
