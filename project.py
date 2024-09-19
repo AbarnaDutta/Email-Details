@@ -353,14 +353,11 @@ def update_total_invoice_amount(ws):
 
     # Append new "Total Amount" row
     last_row = len(all_values)
-    ws.append_row(["Total Amount", "", "", "", "", "", "", "", ""])  # Add empty columns
+    ws.append_row(["Total Amount", "", "", "", "", "", total_amount_text, "", ""])
 
-    # Merge the first six columns (A:F) and G:I
-    ws.merge_cells(last_row + 1, 1, last_row + 1, 6)  # Merge A:F for "Total Amount"
-    ws.merge_cells(last_row + 1, 7, last_row + 1, 9)  # Merge G:I for total value
-
-    # Update the total amount in the merged G:I columns
-    ws.update(f"G{last_row + 1}:I{last_row + 1}", [[total_amount_text, "", ""]])
+    # Merge the first six columns (A:F) and the last three columns (G:I)
+    ws.merge_cells(last_row+1, 1, last_row+1, 6)  # Merge A:F
+    ws.merge_cells(last_row+1, 7, last_row+1, 9)  # Merge G:I
 
 
     print(f"Total invoice amount updated: {total_amount_text}")
