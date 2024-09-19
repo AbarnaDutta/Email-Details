@@ -351,7 +351,7 @@ def update_total_invoice_amount(ws):
     # Check and delete any existing "Total Amount" row
     for i in range(len(all_values)):
         if all_values[i][0] == "Total Amount":
-            ws.delete_row(i + 1)  # Row numbers are 1-indexed
+             ws.delete_rows(i + 1)
 
     # Prepare the total amount text
     total_amount_text = " + ".join([f"{symbol}{total:.2f}" for symbol, total in currency_totals.items()])
