@@ -329,6 +329,7 @@ def update_total_invoice_amount(ws):
             break  # Delete only the first occurrence and stop
             
     records = ws.get_all_records()
+    print("All records:", records)
 
     # Initialize a dictionary to hold totals for different currencies
     currency_totals = {}
@@ -426,6 +427,7 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
 
     # Retrieve all records from the worksheet
     records = ws.get_all_records()
+    
 
     # Flag to determine if a match was found
     match_found = False
