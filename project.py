@@ -335,8 +335,10 @@ def update_total_invoice_amount(ws):
     currency_totals = {}
     no_currency_total = 0.0
 
-    # Start from row 2 (skip header)
-    for record in records[1:]:
+    for idx, record in enumerate(records):
+        # Debug: Print the record being processed with its index
+        print(f"Processing record {idx + 1}: {record}")
+        
         invoice_amount = str(record["Invoice Amount"])
 
         # Debug: Print the raw invoice amount
