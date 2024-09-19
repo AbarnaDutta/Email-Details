@@ -329,6 +329,9 @@ def update_total_invoice_amount(ws):
     for record in records[1:]:
         invoice_amount = str(record["Invoice Amount"])
 
+        # Debug: Print the raw invoice amount
+        print(f"Processing invoice amount: {invoice_amount}")
+
         # Detect currency symbol and extract the amount
         match = re.match(r'([€£$₹]?)([\d,\.]+)', invoice_amount)
         if match:
@@ -337,6 +340,9 @@ def update_total_invoice_amount(ws):
 
             try:
                 amount = float(amount_str)
+                
+                # Debug: Print extracted amount and symbol
+                print(f"Extracted amount: {amount} with symbol: '{currency_symbol}'")
 
                 if currency_symbol == '':
                     # If no currency symbol, treat as separate 'No Currency' amount
@@ -366,10 +372,13 @@ def update_total_invoice_amount(ws):
 
     # Prepare the total amount text for all currencies
     currency_totals_text = " + ".join([f"{symbol}{total:.2f}" for symbol, total in currency_totals.items()])
-    
+
     # Add no currency total if it exists
     if no_currency_total > 0:
         currency_totals_text += f" + {no_currency_total:.2f}"
+
+    # Debug: Print final total amount text
+    print(f"Final total amount text: {currency_totals_text}")
 
     # Append new "Total Amount" row with placeholders for G, H, I
     ws.append_row(["Total Amount", "", "", "", "", "", currency_totals_text, "", ""])
