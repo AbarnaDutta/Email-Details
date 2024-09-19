@@ -351,9 +351,9 @@ def update_total_invoice_amount(ws):
     # Check and delete any existing "Total Amount" row
     for i in range(len(all_values)):
         if all_values[i][0] == "Total Amount":
-             ws.delete_rows(i + 1)
+            ws.delete_rows(i + 1)  # Row numbers are 1-indexed
 
-    # Prepare the total amount text
+    # Prepare the total amount text for all currencies
     total_amount_text = " + ".join([f"{symbol}{total:.2f}" for symbol, total in currency_totals.items()])
 
     # Append new "Total Amount" row with placeholders for G, H, I
@@ -367,6 +367,7 @@ def update_total_invoice_amount(ws):
     ws.merge_cells(new_last_row, 7, new_last_row, 9)  # Merge G:I
 
     print(f"Total invoice amount updated: {total_amount_text}")
+
 
 
 
