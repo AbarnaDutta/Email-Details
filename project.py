@@ -319,6 +319,15 @@ document_extractor = DocumentExtractor(
 
 
 def update_total_invoice_amount(ws):
+    # Get all values to search for "Total Amount" row and determine the number of rows
+    all_values = ws.get_all_values()
+    
+    # Delete the "Total Amount" row if it exists, before processing any records
+    for i in range(len(all_values)):
+        if all_values[i][0] == "Total Amount":
+            ws.delete_rows(i + 1)  # Row numbers are 1-indexed
+            break  # Delete only the first occurrence and stop
+            
     records = ws.get_all_records()
 
     # Initialize a dictionary to hold totals for different currencies
@@ -340,7 +349,7 @@ def update_total_invoice_amount(ws):
 
             try:
                 amount = float(amount_str)
-                
+
                 # Debug: Print extracted amount and symbol
                 print(f"Extracted amount: {amount} with symbol: '{currency_symbol}'")
 
@@ -361,18 +370,9 @@ def update_total_invoice_amount(ws):
     print("Accumulated currency totals:", currency_totals)
     print("No currency total:", no_currency_total)
 
-    # Get all values to search for "Total Amount" row
-    all_values = ws.get_all_values()
-    last_row = len(all_values)
-
-    # Check and delete any existing "Total Amount" row
-    for i in range(len(all_values)):
-        if all_values[i][0] == "Total Amount":
-            ws.delete_rows(i + 1)  # Row numbers are 1-indexed
-
     # Prepare the total amount text for all currencies
     currency_totals_text = " + ".join([f"{symbol}{total:.2f}" for symbol, total in currency_totals.items()])
-
+    
     # Add no currency total if it exists
     if no_currency_total > 0:
         currency_totals_text += f" + {no_currency_total:.2f}"
