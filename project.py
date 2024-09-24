@@ -1,5 +1,10 @@
 import imaplib
 import email
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.utils import formataddr
+from email.header import Header
 from email.header import decode_header
 from datetime import datetime, timedelta
 import gspread
@@ -19,6 +24,7 @@ from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 import sys
 from azure.core.exceptions import HttpResponseError
+
 
 
 sys.stdout.reconfigure(encoding='utf-8')
@@ -477,6 +483,13 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
 
         # Update the Google Sheet
         ws.append_row([email_date, email_time, from_, subject, invoice_number, invoice_date, invoice_amount, vendor_name, email_folder_link])
+        # Send reply email with details
+        send_reply_email(from_, subject, {
+            'invoice_number': invoice_number,
+            'invoice_date': invoice_date,
+            'invoice_amount': invoice_amount,
+            'vendor_name': vendor_name,
+        })
         # Update the total invoice amount at the bottom of the sheet
         update_total_invoice_amount(ws)
         
@@ -484,7 +497,32 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
     else:
         print(f"Email from {from_} with subject {subject} already exists with the same details.")
 
+def send_reply_email(to_address, subject, invoice_data):
+    # Create the email
+    msg = MIMEMultipart()
+    msg['From'] = username
+    msg['To'] = to_address
+    msg['Subject'] = f"Re: {subject}"
 
+    # Create the email body with invoice details
+    body = f"""
+    Here are the details extracted from the attachment:
+
+    Invoice Number: {invoice_data['invoice_number']}
+    Invoice Date: {invoice_data['invoice_date']}
+    Invoice Amount: {invoice_data['invoice_amount']}
+    Vendor Name: {invoice_data['vendor_name']}
+
+    
+    """
+    
+    msg.attach(MIMEText(body, 'plain'))
+
+    # Send the email
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(username, password)
+        server.sendmail(username, to_address, msg.as_string())
+        print(f"Email sent to {to_address}")
 
     
 # Fetch and process each email
