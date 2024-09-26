@@ -483,12 +483,18 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
 
         # Update the Google Sheet
         ws.append_row([email_date, email_time, from_, subject, invoice_number, invoice_date, invoice_amount, vendor_name, email_folder_link])
-        # Send reply email with details
+        # Prepare Google Sheets link
+        spreadsheet_id = ws.spreadsheet.id  # This fetches the correct spreadsheet ID
+        worksheet_id = ws.id  # This fetches the correct worksheet ID
+        sheet_link = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit#gid={worksheet_id}"
+        
+        # Send reply email with details and link
         send_reply_email(from_, subject, {
             'invoice_number': invoice_number,
             'invoice_date': invoice_date,
             'invoice_amount': invoice_amount,
             'vendor_name': vendor_name,
+            'sheet_link': sheet_link  # Include the link in the email
         })
         # Update the total invoice amount at the bottom of the sheet
         update_total_invoice_amount(ws)
@@ -512,6 +518,7 @@ def send_reply_email(to_address, subject, invoice_data):
     Invoice Date: {invoice_data['invoice_date']}
     Invoice Amount: {invoice_data['invoice_amount']}
     Vendor Name: {invoice_data['vendor_name']}
+    You can view the updated sheet here: {invoice_data['sheet_link']}
 
     
     """
