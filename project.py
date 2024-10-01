@@ -545,7 +545,7 @@ for email_id in email_ids:
                             temp_file.write(file_data)
                         extracted_data = document_extractor.extract_document_data(temp_path)
                         temp_path.unlink()  # Remove temporary file
-                        process_email_attachment(email_date, email_time, from_, subject, part, extracted_data,, results)
+                        process_email_attachment(email_date, email_time, from_, subject, part, extracted_data,results)
 
             else:
                 has_attachment, filename, file_data = process_part(msg)
