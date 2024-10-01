@@ -535,28 +535,37 @@ for email_id in email_ids:
             msg_id = msg.get("Message-ID")
             references = msg.get("References", msg_id)
             results = []
+            supported_formats = ["application/pdf", "image/png", "image/jpeg"]
 
             if msg.is_multipart():
                 for part in msg.walk():
                     part_has_attachment, filename, file_data = process_part(part)
                     if part_has_attachment:
-                        temp_path = Path(f"temp_{filename}")
-                        with open(temp_path, "wb") as temp_file:
-                            temp_file.write(file_data)
-                        extracted_data = document_extractor.extract_document_data(temp_path)
-                        temp_path.unlink()  # Remove temporary file
-                        process_email_attachment(email_date, email_time, from_, subject, part, extracted_data,results)
+                        content_type = part.get_content_type()  # Get the content type of the attachment
+                        if content_type not in supported_formats:
+                            results.append(f"{filename} unsupported attachment, please send an image or document.")
+                        else:
+                            temp_path = Path(f"temp_{filename}")
+                            with open(temp_path, "wb") as temp_file:
+                                temp_file.write(file_data)
+                            extracted_data = document_extractor.extract_document_data(temp_path)
+                            temp_path.unlink()  # Remove temporary file
+                            process_email_attachment(email_date, email_time, from_, subject, part, extracted_data,results)
 
             else:
                 has_attachment, filename, file_data = process_part(msg)
                 if has_attachment:
-                    temp_path = Path(f"temp_{filename}")
-                    with open(temp_path, "wb") as temp_file:
-                        temp_file.write(file_data)
-                    extracted_data = document_extractor.extract_document_data(temp_path)
-                    temp_path.unlink()
-
-                    process_email_attachment(email_date, email_time, from_, subject, msg, extracted_data, results)
+                    content_type = msg.get_content_type()  # Get the content type of the attachment
+                    if content_type not in supported_formats:
+                        results.append(f"{filename} unsupported attachment, please send an image or document.")
+                    else:
+                        temp_path = Path(f"temp_{filename}")
+                        with open(temp_path, "wb") as temp_file:
+                            temp_file.write(file_data)
+                        extracted_data = document_extractor.extract_document_data(temp_path)
+                        temp_path.unlink()
+    
+                        process_email_attachment(email_date, email_time, from_, subject, msg, extracted_data, results)
             
             body = "\n".join(results)
             send_reply_email(from_, subject, body, msg_id, references)
