@@ -25,8 +25,6 @@ from azure.core.credentials import AzureKeyCredential
 import sys
 from azure.core.exceptions import HttpResponseError
 
-
-
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Account credentials
@@ -165,7 +163,6 @@ def process_part(part):
     print(f"Content Transfer Encoding: {content_transfer_encoding}")
 
     return has_attachment, filename, file_data
-
 
 class APIRateLimiter:
     def __init__(self, min_interval_seconds):
@@ -323,7 +320,6 @@ document_extractor = DocumentExtractor(
     receipt_model="prebuilt-receipt"
 )
 
-
 def update_total_invoice_amount(ws):
     # Get all values to search for "Total Amount" row and determine the number of rows
     all_values = ws.get_all_values()
@@ -401,16 +397,14 @@ def update_total_invoice_amount(ws):
 
     print(f"Total invoice amount updated: {currency_totals_text}")
 
+def process_email_attachment(email_date, email_time, from_, subject, part, extracted_data, results):
+    filename = part.get_filename()
 
-
-
-
-
-
-
-
-
-def process_email_attachment(email_date, email_time, from_, subject, part, extracted_data):
+    # Check unsupported attachment types
+    if not filename.lower().endswith(('.pdf', '.jpg', '.jpeg', '.png')):
+        results.append(f"{filename} unsupported attachment, please send an image or document")
+        return
+        
     # Normalize the extracted data for comparison
     normalized_extracted_data = json.dumps(
         extracted_data, ensure_ascii=False, indent=None, separators=(',', ':')
@@ -425,6 +419,7 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
     
     if not invoice_date:
         print("No invoice date found in the attachment.")
+        results.append(f"No invoice date found in the attachment {filename}, can't update the sheet")
         return
 
     # Determine year-month from the invoice date
@@ -464,6 +459,7 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
             normalized_record['Vendor Name'] == vendor_name
         ):
             print("Match found with the existing record.")
+            results.append(f"Attachment {filename} already exists in the record")
             match_found = True
             break
     # If no exact match is found, update the record
@@ -483,19 +479,12 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
 
         # Update the Google Sheet
         ws.append_row([email_date, email_time, from_, subject, invoice_number, invoice_date, invoice_amount, vendor_name, email_folder_link])
-        # Prepare Google Sheets link
-        spreadsheet_id = ws.spreadsheet.id  # This fetches the correct spreadsheet ID
-        worksheet_id = ws.id  # This fetches the correct worksheet ID
-        sheet_link = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit#gid={worksheet_id}"
-        
-        # Send reply email with details and link
-        send_reply_email(from_, subject, {
-            'invoice_number': invoice_number,
-            'invoice_date': invoice_date,
-            'invoice_amount': invoice_amount,
-            'vendor_name': vendor_name,
-            'sheet_link': sheet_link  # Include the link in the email
-        })
+        results.append(f"Record updated for the attachment {filename}: \n"
+                       f"    Invoice Number: {invoice_number}\n"
+                       f"    Invoice Date: {invoice_date}\n"
+                       f"    Invoice Amount: {invoice_amount}\n"
+                       f"    Vendor Name: {vendor_name}")
+       
         # Update the total invoice amount at the bottom of the sheet
         update_total_invoice_amount(ws)
         
@@ -503,33 +492,27 @@ def process_email_attachment(email_date, email_time, from_, subject, part, extra
     else:
         print(f"Email from {from_} with subject {subject} already exists with the same details.")
 
-def send_reply_email(to_address, subject, invoice_data):
-    # Create the email
+def send_reply_email(to_address, subject, body, msg_id, references):
+    """
+    Send a reply email with all results collected.
+    """
     msg = MIMEMultipart()
     msg['From'] = username
     msg['To'] = to_address
     msg['Subject'] = f"Re: {subject}"
 
-    # Create the email body with invoice details
-    body = f"""
-    Here are the details extracted from the attachment:
+    # Include In-Reply-To and References headers
+    msg.add_header('In-Reply-To', msg_id)
+    msg.add_header('References', references)
 
-    Invoice Number: {invoice_data['invoice_number']}
-    Invoice Date: {invoice_data['invoice_date']}
-    Invoice Amount: {invoice_data['invoice_amount']}
-    Vendor Name: {invoice_data['vendor_name']}
-    You can view the updated sheet here: {invoice_data['sheet_link']}
-
-    
-    """
-    
+    # Attach the body of the email
     msg.attach(MIMEText(body, 'plain'))
 
     # Send the email
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(username, password)
         server.sendmail(username, to_address, msg.as_string())
-        print(f"Email sent to {to_address}")
+        print(f"Reply email sent to {to_address}")
 
     
 # Fetch and process each email
@@ -549,6 +532,9 @@ for email_id in email_ids:
             date_ = msg.get("Date")
             email_time = decode_date(date_).strftime("%H:%M:%S")
             email_date = decode_date(date_).strftime("%Y-%m-%d")
+            msg_id = msg.get("Message-ID")
+            references = msg.get("References", msg_id)
+            results = []
 
             if msg.is_multipart():
                 for part in msg.walk():
@@ -559,7 +545,7 @@ for email_id in email_ids:
                             temp_file.write(file_data)
                         extracted_data = document_extractor.extract_document_data(temp_path)
                         temp_path.unlink()  # Remove temporary file
-                        process_email_attachment(email_date, email_time, from_, subject, part, extracted_data)
+                        process_email_attachment(email_date, email_time, from_, subject, part, extracted_data,, results)
 
             else:
                 has_attachment, filename, file_data = process_part(msg)
@@ -570,7 +556,11 @@ for email_id in email_ids:
                     extracted_data = document_extractor.extract_document_data(temp_path)
                     temp_path.unlink()
 
-                    process_email_attachment(email_date, email_time, from_, subject, msg, extracted_data)
+                    process_email_attachment(email_date, email_time, from_, subject, msg, extracted_data, results)
+            
+            body = "\n".join(results)
+            send_reply_email(from_, subject, body, msg_id, references)
+            
     # Mark the email as seen
     mail.store(email_id, '+FLAGS', '\\Seen')
 
