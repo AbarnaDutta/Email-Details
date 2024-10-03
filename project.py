@@ -535,7 +535,7 @@ for email_id in email_ids:
             msg_id = msg.get("Message-ID")
             references = msg.get("References", msg_id)
             results = []
-            supported_formats = ["application/pdf", "image/png", "image/jpeg"]
+            supported_formats = ["application/pdf", "image/png", "image/jpeg", "image/jpg"]
 
             if msg.is_multipart():
                 for part in msg.walk():
