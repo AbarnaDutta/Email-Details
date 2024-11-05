@@ -542,7 +542,7 @@ for email_id in email_ids:
                     part_has_attachment, filename, file_data = process_part(part)
                     if part_has_attachment:
                         content_type = part.get_content_type()  # Get the content type of the attachment
-                        if content_type not in supported_formats:
+                        if content_type not in supported_formats or (content_type == "application/octet-stream"):
                             results.append(f"{filename} unsupported attachment, please send an image or document.")
                         else:
                             temp_path = Path(f"temp_{filename}")
