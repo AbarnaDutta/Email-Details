@@ -535,14 +535,14 @@ for email_id in email_ids:
             msg_id = msg.get("Message-ID")
             references = msg.get("References", msg_id)
             results = []
-            supported_formats = ["application/pdf", "image/png", "image/jpeg", "image/jpg"]
+            supported_formats = ["application/pdf", "image/png", "image/jpeg", "image/jpg", "application/octet-stream"]
 
             if msg.is_multipart():
                 for part in msg.walk():
                     part_has_attachment, filename, file_data = process_part(part)
                     if part_has_attachment:
                         content_type = part.get_content_type()  # Get the content type of the attachment
-                        if content_type not in supported_formats or (content_type == "application/octet-stream"):
+                        if content_type not in supported_formats or (content_type == "application/octet-stream" and not filename.endswith(".pdf")):
                             results.append(f"{filename} unsupported attachment, please send an image or document.")
                         else:
                             temp_path = Path(f"temp_{filename}")
